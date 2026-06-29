@@ -60,7 +60,7 @@
     }
 
     .badge {
-        @apply inline-flex items-center rounded-full px-2 py-1 text-xs font-semibold capitalize;
+        @apply inline-flex items-center whitespace-nowrap rounded-full px-2 py-1 text-xs font-semibold capitalize;
     }
 
     .badge-draft {
@@ -98,11 +98,11 @@
     }
 
     .table-wrap {
-        @apply overflow-x-auto;
+        @apply w-full overflow-visible;
     }
 
     .data-table {
-        @apply min-w-full divide-y divide-zinc-200 text-left text-sm;
+        @apply w-full table-auto divide-y divide-zinc-200 text-left text-sm;
     }
 
     .data-table th {
@@ -110,7 +110,14 @@
     }
 
     .data-table td {
-        @apply whitespace-nowrap px-4 py-3 align-top text-zinc-700;
+        @apply whitespace-normal px-4 py-3 align-top text-zinc-700;
+        overflow-wrap: break-word;
+        word-break: normal;
+    }
+
+    .text-wrap-anywhere {
+        overflow-wrap: anywhere;
+        word-break: break-word;
     }
 
     .two-line-title {

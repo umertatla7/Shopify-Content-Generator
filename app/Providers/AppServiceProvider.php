@@ -15,6 +15,7 @@ use App\Policies\StoreAnalysisPolicy;
 use App\Services\AI\AIProviderInterface;
 use App\Services\AI\OpenAIProviderService;
 use App\Services\AI\StubAIProviderService;
+use App\Services\SystemSettingService;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\ServiceProvider;
 
@@ -26,7 +27,9 @@ class AppServiceProvider extends ServiceProvider
     public function register(): void
     {
         $this->app->bind(AIProviderInterface::class, function () {
-            return config('services.ai.provider') === 'openai'
+            $provider = app(SystemSettingService::class)->get('ai_provider', config('services.ai.provider'));
+
+            return $provider === 'openai'
                 ? app(OpenAIProviderService::class)
                 : app(StubAIProviderService::class);
         });

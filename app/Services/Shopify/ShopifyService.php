@@ -15,6 +15,11 @@ use RuntimeException;
 
 class ShopifyService
 {
+    public function isValidShopDomain(string $shop): bool
+    {
+        return (bool) preg_match('/^[a-zA-Z0-9][a-zA-Z0-9\-]*\.myshopify\.com$/', $shop);
+    }
+
     public function normalizeDomain(string $url): string
     {
         $domain = Str::of($url)
@@ -24,6 +29,122 @@ class ShopifyService
             ->toString();
 
         return trim($domain);
+    }
+
+    public function verifyRequestHmac(array $parameters, ?string $providedHmac, ?string $secret = null): bool
+    {
+        if (! $providedHmac) {
+            return false;
+        }
+
+        unset($parameters['hmac'], $parameters['signature']);
+        ksort($parameters);
+
+        $message = collect($parameters)
+            ->map(fn ($value, $key) => "{$key}=".str_replace('%', '%25', (string) $value))
+            ->implode('&');
+
+        $digest = hash_hmac('sha256', $message, $secret ?: $this->publicAppClientSecret());
+
+        return hash_equals($digest, $providedHmac);
+    }
+
+    public function publicAppApiKey(): string
+    {
+        return (string) config('services.shopify.public_app_api_key');
+    }
+
+    public function publicAppClientSecret(): string
+    {
+        return (string) config('services.shopify.public_app_client_secret');
+    }
+
+    public function publicAppScopes(): array
+    {
+        return config('services.shopify.public_app_scopes', []);
+    }
+
+    public function publicAppRedirectUri(): string
+    {
+        return (string) (config('services.shopify.public_app_redirect_uri') ?: route('shopify.oauth.callback'));
+    }
+
+    public function authorizationUrl(string $shop, string $state): string
+    {
+        if (! $this->publicAppApiKey() || ! $this->publicAppClientSecret()) {
+            throw new RuntimeException('Shopify public app credentials are missing. Add SHOPIFY_PUBLIC_APP_API_KEY and SHOPIFY_PUBLIC_APP_CLIENT_SECRET.');
+        }
+
+        $query = [
+            'client_id' => $this->publicAppApiKey(),
+            'redirect_uri' => $this->publicAppRedirectUri(),
+            'state' => $state,
+        ];
+
+        $scopes = implode(',', $this->publicAppScopes());
+
+        if ($scopes !== '') {
+            $query['scope'] = $scopes;
+        }
+
+        return "https://{$shop}/admin/oauth/authorize?".http_build_query($query);
+    }
+
+    public function exchangeAuthorizationCode(string $shop, string $code): array
+    {
+        $response = Http::asForm()
+            ->acceptJson()
+            ->timeout((int) config('services.shopify.timeout', 30))
+            ->post("https://{$shop}/admin/oauth/access_token", [
+                'client_id' => $this->publicAppApiKey(),
+                'client_secret' => $this->publicAppClientSecret(),
+                'code' => $code,
+            ]);
+
+        if ($response->failed()) {
+            throw new RuntimeException($response->json('error_description') ?? $response->json('error') ?? 'Shopify rejected the authorization code.');
+        }
+
+        $payload = $response->json();
+
+        if (! ($payload['access_token'] ?? null)) {
+            throw new RuntimeException('Shopify did not return an access token after OAuth.');
+        }
+
+        return $payload;
+    }
+
+    public function shopDetailsFromAccessToken(string $shop, string $accessToken): array
+    {
+        $response = Http::withHeaders([
+            'X-Shopify-Access-Token' => $accessToken,
+            'Accept' => 'application/json',
+        ])->timeout((int) config('services.shopify.timeout', 30))
+            ->post("https://{$shop}/admin/api/".config('services.shopify.api_version', '2026-04').'/graphql.json', [
+                'query' => <<<'GRAPHQL'
+{
+  shop {
+    name
+    myshopifyDomain
+    primaryDomain { url host }
+    description
+    contactEmail
+    email
+    currencyCode
+    ianaTimezone
+    shopAddress { countryCode }
+    shipsToCountries
+  }
+}
+GRAPHQL,
+                'variables' => (object) [],
+            ]);
+
+        if ($response->failed() || $response->json('errors')) {
+            throw new RuntimeException($response->json('errors.0.message') ?? 'Shopify returned an error while loading shop details.');
+        }
+
+        return $response->json('data.shop', []);
     }
 
     public function validateConnection(ShopifyStore $store): array
@@ -228,6 +349,7 @@ mutation UpdateProductContent($product: ProductUpdateInput!) {
 GRAPHQL, [
             'product' => array_filter([
                 'id' => $this->toGid($product->shopify_product_id, 'Product'),
+                'status' => ! empty($content['publish']) ? 'ACTIVE' : null,
                 'title' => $content['title'] ?? null,
                 'descriptionHtml' => $content['description_html'] ?? null,
                 'seo' => array_filter([

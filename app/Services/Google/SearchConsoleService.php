@@ -11,6 +11,7 @@ use App\Models\SearchConsoleProperty;
 use App\Models\ShopifyStore;
 use App\Models\TrackedKeyword;
 use App\Models\User;
+use App\Services\SystemSettingService;
 use Carbon\CarbonInterface;
 use Illuminate\Http\Client\PendingRequest;
 use Illuminate\Support\Arr;
@@ -23,17 +24,20 @@ class SearchConsoleService
 {
     public const READONLY_SCOPE = 'https://www.googleapis.com/auth/webmasters.readonly';
 
+    public function __construct(private readonly SystemSettingService $settings) {}
+
     public function authorizationUrl(string $state): string
     {
-        $clientId = config('services.google_search_console.client_id');
+        $clientId = $this->setting('google_search_console_client_id', 'client_id');
+        $clientSecret = $this->setting('google_search_console_client_secret', 'client_secret');
 
-        if (! $clientId || ! config('services.google_search_console.client_secret')) {
+        if (! $clientId || ! $clientSecret) {
             throw new RuntimeException('Google Search Console OAuth credentials are not configured.');
         }
 
-        return config('services.google_search_console.auth_url').'?'.http_build_query([
+        return $this->setting('google_search_console_auth_url', 'auth_url').'?'.http_build_query([
             'client_id' => $clientId,
-            'redirect_uri' => config('services.google_search_console.redirect_uri'),
+            'redirect_uri' => $this->redirectUri(),
             'response_type' => 'code',
             'scope' => implode(' ', [
                 self::READONLY_SCOPE,
@@ -50,12 +54,12 @@ class SearchConsoleService
     {
         $response = Http::asForm()
             ->timeout((int) config('services.google_search_console.timeout', 45))
-            ->post(config('services.google_search_console.token_url'), [
-                'client_id' => config('services.google_search_console.client_id'),
-                'client_secret' => config('services.google_search_console.client_secret'),
+            ->post($this->setting('google_search_console_token_url', 'token_url'), [
+                'client_id' => $this->setting('google_search_console_client_id', 'client_id'),
+                'client_secret' => $this->setting('google_search_console_client_secret', 'client_secret'),
                 'code' => $code,
                 'grant_type' => 'authorization_code',
-                'redirect_uri' => config('services.google_search_console.redirect_uri'),
+                'redirect_uri' => $this->redirectUri(),
             ]);
 
         if ($response->failed()) {
@@ -122,9 +126,9 @@ class SearchConsoleService
 
         $response = Http::asForm()
             ->timeout((int) config('services.google_search_console.timeout', 45))
-            ->post(config('services.google_search_console.token_url'), [
-                'client_id' => config('services.google_search_console.client_id'),
-                'client_secret' => config('services.google_search_console.client_secret'),
+            ->post($this->setting('google_search_console_token_url', 'token_url'), [
+                'client_id' => $this->setting('google_search_console_client_id', 'client_id'),
+                'client_secret' => $this->setting('google_search_console_client_secret', 'client_secret'),
                 'refresh_token' => $connection->refresh_token,
                 'grant_type' => 'refresh_token',
             ]);
@@ -285,6 +289,15 @@ class SearchConsoleService
         return $count;
     }
 
+    public function addTrackedKeyword(Account $account, array $attributes): TrackedKeyword
+    {
+        return $this->trackKeyword($account->id, [
+            ...$attributes,
+            'source_type' => $attributes['source_type'] ?? 'manual',
+            'first_seen_at' => $attributes['first_seen_at'] ?? now(),
+        ]);
+    }
+
     public function syncSearchAnalytics(SearchConsoleProperty $property, CarbonInterface|string $startDate, CarbonInterface|string $endDate): int
     {
         $property->loadMissing('connection');
@@ -334,17 +347,11 @@ class SearchConsoleService
                 continue;
             }
 
-            $trackedKeyword = $this->trackKeyword($property->account_id, [
-                'shopify_store_id' => $property->shopify_store_id,
-                'keyword' => $query,
-                'target_url' => $page,
-                'source_type' => 'search_console',
-                'source_id' => $property->id,
-            ]);
+            $trackedKeyword = $this->findTrackedKeyword($property->account_id, (string) $query, $page);
 
             KeywordPositionSnapshot::query()->create([
                 'account_id' => $property->account_id,
-                'tracked_keyword_id' => $trackedKeyword->id,
+                'tracked_keyword_id' => $trackedKeyword?->id,
                 'shopify_store_id' => $property->shopify_store_id,
                 'search_console_property_id' => $property->id,
                 'source' => 'search_console',
@@ -362,7 +369,7 @@ class SearchConsoleService
                 ],
             ]);
 
-            $trackedKeyword->update(['last_checked_at' => now()]);
+            $trackedKeyword?->update(['last_checked_at' => now()]);
             $stored++;
         }
 
@@ -385,7 +392,7 @@ class SearchConsoleService
 
     private function apiUrl(string $path): string
     {
-        return rtrim((string) config('services.google_search_console.api_url'), '/').$path;
+        return rtrim((string) $this->setting('google_search_console_api_url', 'api_url'), '/').$path;
     }
 
     private function fetchGoogleEmail(string $accessToken): ?string
@@ -393,7 +400,7 @@ class SearchConsoleService
         $response = Http::acceptJson()
             ->timeout((int) config('services.google_search_console.timeout', 45))
             ->withToken($accessToken)
-            ->get(config('services.google_search_console.userinfo_url'));
+            ->get($this->setting('google_search_console_userinfo_url', 'userinfo_url'));
 
         if ($response->failed()) {
             return null;
@@ -423,9 +430,36 @@ class SearchConsoleService
                 'source_id' => $attributes['source_id'] ?? null,
                 'intent' => $attributes['intent'] ?? null,
                 'status' => 'active',
-                'first_seen_at' => now(),
+                'first_seen_at' => $attributes['first_seen_at'] ?? now(),
             ]
         );
+    }
+
+    private function findTrackedKeyword(int $accountId, string $keyword, ?string $targetUrl = null): ?TrackedKeyword
+    {
+        $normalized = Str::lower(trim($keyword));
+
+        if ($normalized === '') {
+            return null;
+        }
+
+        return TrackedKeyword::query()
+            ->where('account_id', $accountId)
+            ->where('status', 'active')
+            ->where('keyword', Str::limit($normalized, 255, ''))
+            ->when($targetUrl, fn ($query) => $query->orderByRaw('case when target_url = ? then 0 when target_url is null then 1 else 2 end', [$targetUrl]))
+            ->orderByDesc('last_checked_at')
+            ->first();
+    }
+
+    private function setting(string $settingKey, string $configKey): mixed
+    {
+        return $this->settings->get($settingKey, config("services.google_search_console.{$configKey}"));
+    }
+
+    private function redirectUri(): string
+    {
+        return (string) $this->setting('google_search_console_redirect_uri', 'redirect_uri');
     }
 
     private function matchingStore(Collection $stores, string $siteUrl): ?ShopifyStore

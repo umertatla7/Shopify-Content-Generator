@@ -5,6 +5,7 @@ use App\Http\Controllers\Admin\AdminActivityController;
 use App\Http\Controllers\Admin\AdminBlogController;
 use App\Http\Controllers\Admin\AdminDashboardController;
 use App\Http\Controllers\Admin\AdminPlanController;
+use App\Http\Controllers\Admin\AdminSettingsController;
 use App\Http\Controllers\Admin\AdminStoreController;
 use App\Http\Controllers\Admin\AdminTopicController;
 use App\Http\Controllers\Admin\AdminUserController;
@@ -14,8 +15,9 @@ use App\Http\Controllers\Auth\AuthenticatedSessionController;
 use App\Http\Controllers\Auth\NewPasswordController;
 use App\Http\Controllers\Auth\PasswordResetLinkController;
 use App\Http\Controllers\Auth\RegisteredUserController;
-use App\Http\Controllers\BlogController;
+use App\Http\Controllers\BillingController;
 use App\Http\Controllers\BlogBodyGenerationController;
+use App\Http\Controllers\BlogController;
 use App\Http\Controllers\BlogImageController;
 use App\Http\Controllers\BlogPublishController;
 use App\Http\Controllers\BlogScheduleController;
@@ -24,12 +26,13 @@ use App\Http\Controllers\BlogWorkflowController;
 use App\Http\Controllers\CollectionContentController;
 use App\Http\Controllers\CollectionController;
 use App\Http\Controllers\DashboardController;
-use App\Http\Controllers\ProductController;
 use App\Http\Controllers\ProductContentController;
+use App\Http\Controllers\ProductController;
 use App\Http\Controllers\SearchConsoleController;
+use App\Http\Controllers\ShopifyInstallController;
 use App\Http\Controllers\ShopifyStoreController;
-use App\Http\Controllers\StoreKnowledgeBaseController;
 use App\Http\Controllers\StoreAnalysisController;
+use App\Http\Controllers\StoreKnowledgeBaseController;
 use App\Http\Controllers\TeamController;
 use Illuminate\Support\Facades\Route;
 
@@ -44,6 +47,8 @@ Route::middleware('guest')->group(function (): void {
     Route::get('/reset-password/{token}', [NewPasswordController::class, 'create'])->name('password.reset');
     Route::post('/reset-password', [NewPasswordController::class, 'store'])->name('password.store');
 });
+
+Route::get('/shopify/app', [ShopifyInstallController::class, 'app'])->name('shopify.app');
 
 Route::middleware('auth')->group(function (): void {
     Route::get('/dashboard', DashboardController::class)->name('dashboard');
@@ -65,6 +70,8 @@ Route::middleware('auth')->group(function (): void {
         Route::get('/plans', [AdminPlanController::class, 'index'])->name('plans.index');
         Route::post('/plans', [AdminPlanController::class, 'store'])->name('plans.store');
         Route::patch('/plans/{plan}', [AdminPlanController::class, 'update'])->name('plans.update');
+        Route::get('/settings', [AdminSettingsController::class, 'index'])->name('settings.index');
+        Route::post('/settings', [AdminSettingsController::class, 'update'])->name('settings.update');
         Route::get('/stores', [AdminStoreController::class, 'index'])->name('stores.index');
         Route::get('/topics', [AdminTopicController::class, 'index'])->name('topics.index');
         Route::get('/blogs', [AdminBlogController::class, 'index'])->name('blogs.index');
@@ -72,6 +79,8 @@ Route::middleware('auth')->group(function (): void {
     });
 
     Route::get('/stores', [ShopifyStoreController::class, 'index'])->name('stores.index');
+    Route::get('/shopify/install/start', [ShopifyInstallController::class, 'start'])->name('shopify.install.start');
+    Route::get('/shopify/oauth/callback', [ShopifyInstallController::class, 'callback'])->name('shopify.oauth.callback');
     Route::post('/stores', [ShopifyStoreController::class, 'store'])->name('stores.store')->middleware('throttle:10,1');
     Route::post('/stores/{store}/sync', [ShopifyStoreController::class, 'sync'])->name('stores.sync');
     Route::post('/stores/{store}/analysis', [StoreAnalysisController::class, 'store'])->name('stores.analysis.store');
@@ -79,6 +88,12 @@ Route::middleware('auth')->group(function (): void {
     Route::post('/stores/{store}/knowledge-base', [StoreKnowledgeBaseController::class, 'generate'])->name('stores.knowledge-base.generate');
     Route::patch('/stores/{store}/knowledge-base', [StoreKnowledgeBaseController::class, 'update'])->name('stores.knowledge-base.update');
     Route::delete('/stores/{store}', [ShopifyStoreController::class, 'destroy'])->name('stores.destroy');
+
+    Route::get('/billing', [BillingController::class, 'index'])->name('billing.index');
+    Route::post('/billing/plans/{plan}/subscribe', [BillingController::class, 'subscribe'])->name('billing.subscribe');
+    Route::get('/billing/confirm', [BillingController::class, 'confirm'])->name('billing.confirm');
+    Route::post('/billing/sync', [BillingController::class, 'sync'])->name('billing.sync');
+    Route::post('/billing/cancel', [BillingController::class, 'cancel'])->name('billing.cancel');
 
     Route::get('/products', [ProductController::class, 'index'])->name('products.index');
     Route::post('/products/{product}/generate-content', [ProductContentController::class, 'generate'])->name('products.generate-content');
@@ -94,6 +109,8 @@ Route::middleware('auth')->group(function (): void {
     Route::post('/rank-tracking/search-console/properties/sync', [SearchConsoleController::class, 'syncProperties'])->name('search-console.properties.sync');
     Route::patch('/rank-tracking/search-console/properties/{property}', [SearchConsoleController::class, 'updateProperty'])->name('search-console.properties.update');
     Route::post('/rank-tracking/search-console/sync', [SearchConsoleController::class, 'syncPerformance'])->name('search-console.performance.sync');
+    Route::post('/tracked-keywords', [SearchConsoleController::class, 'storeTrackedKeyword'])->name('tracked-keywords.store');
+    Route::delete('/tracked-keywords/{trackedKeyword}', [SearchConsoleController::class, 'destroyTrackedKeyword'])->name('tracked-keywords.destroy');
 
     Route::get('/ai-visibility', [AeoGeoVisibilityController::class, 'index'])->name('visibility.index');
     Route::post('/ai-visibility/reports', [AeoGeoVisibilityController::class, 'store'])->name('visibility.reports.store');

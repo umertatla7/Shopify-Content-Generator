@@ -27,11 +27,15 @@ const props = defineProps({
     summary: Object,
     topPages: Array,
     rankings: Object,
+    trackedKeywords: Array,
+    planUsage: Object,
 });
 
 const syncingProperties = ref(false);
 const syncingPerformance = ref(false);
 const updatingProperty = ref(null);
+const savingKeyword = ref(false);
+const removingKeywordId = ref(null);
 const filters = ref({
     property_id: props.filters.property_id ?? props.selectedPropertyId ?? '',
     start_date: props.filters.start_date ?? '',
@@ -40,10 +44,17 @@ const filters = ref({
     country: props.filters.country ?? '',
     q: props.filters.q ?? '',
 });
+const keywordForm = ref({
+    keyword: '',
+    shopify_store_id: '',
+    target_url: '',
+    intent: '',
+});
 
 const selectedProperty = computed(() => props.properties.find((property) => property.id === Number(filters.value.property_id)) ?? props.properties[0] ?? null);
 const connected = computed(() => props.connection && ['connected', 'failed'].includes(props.connection.status));
 const hasRows = computed(() => props.rankings?.data?.length > 0);
+const keywordMetric = computed(() => props.planUsage?.metrics?.tracked_keywords ?? null);
 
 const statCards = computed(() => [
     ['Tracked keywords', props.summary.tracked_keywords ?? 0, KeyRound, 'bg-teal-50 text-teal-800'],
@@ -119,6 +130,32 @@ const updatePropertyStore = (property, storeId) => {
     }, {
         preserveScroll: true,
         onFinish: () => updatingProperty.value = null,
+    });
+};
+
+const saveKeyword = () => {
+    savingKeyword.value = true;
+    router.post('/tracked-keywords', {
+        keyword: keywordForm.value.keyword,
+        shopify_store_id: keywordForm.value.shopify_store_id || null,
+        target_url: keywordForm.value.target_url || null,
+        intent: keywordForm.value.intent || null,
+    }, {
+        preserveScroll: true,
+        onSuccess: () => {
+            keywordForm.value.keyword = '';
+            keywordForm.value.target_url = '';
+            keywordForm.value.intent = '';
+        },
+        onFinish: () => savingKeyword.value = false,
+    });
+};
+
+const removeKeyword = (keyword) => {
+    removingKeywordId.value = keyword.id;
+    router.delete(`/tracked-keywords/${keyword.id}`, {
+        preserveScroll: true,
+        onFinish: () => removingKeywordId.value = null,
     });
 };
 </script>
@@ -240,6 +277,77 @@ const updatePropertyStore = (property, storeId) => {
                 </div>
             </section>
 
+            <section class="panel">
+                <div class="panel-header">
+                    <div>
+                        <h2 class="text-sm font-bold text-zinc-950">Tracked keyword list</h2>
+                        <p class="text-xs text-zinc-500">Manual keywords stay focused and help keep the public app experience clean. You are using {{ keywordMetric?.used ?? 0 }} of {{ keywordMetric?.limit ?? 'Unlimited' }} slots.</p>
+                    </div>
+                </div>
+                <div class="panel-body border-b border-zinc-200">
+                    <div class="grid gap-3 lg:grid-cols-[1.3fr_1fr_1fr_1fr_auto]">
+                        <div>
+                            <label>Keyword</label>
+                            <input v-model="keywordForm.keyword" placeholder="moonstone engagement ring" />
+                        </div>
+                        <div>
+                            <label>Store</label>
+                            <select v-model="keywordForm.shopify_store_id">
+                                <option value="">Optional store</option>
+                                <option v-for="store in props.stores" :key="store.id" :value="store.id">{{ store.name }}</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label>Intent</label>
+                            <input v-model="keywordForm.intent" placeholder="commercial" />
+                        </div>
+                        <div>
+                            <label>Target URL</label>
+                            <input v-model="keywordForm.target_url" placeholder="https://..." />
+                        </div>
+                        <div class="flex items-end">
+                            <button type="button" class="btn btn-primary w-full" :disabled="savingKeyword || !keywordForm.keyword" @click="saveKeyword">
+                                <LoaderCircle v-if="savingKeyword" class="size-4 animate-spin" />
+                                <KeyRound v-else class="size-4" />
+                                Add
+                            </button>
+                        </div>
+                    </div>
+                </div>
+                <div class="table-wrap">
+                    <table class="data-table">
+                        <thead>
+                            <tr>
+                                <th>Keyword</th>
+                                <th>Store</th>
+                                <th>Intent</th>
+                                <th>Latest position</th>
+                                <th>Last checked</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y divide-zinc-100">
+                            <tr v-for="keyword in props.trackedKeywords" :key="keyword.id">
+                                <td class="font-semibold text-zinc-950">{{ keyword.keyword }}</td>
+                                <td>{{ keyword.store?.name || 'All stores' }}</td>
+                                <td>{{ keyword.intent || '-' }}</td>
+                                <td>{{ keyword.latest_snapshot?.position ?? 'N/A' }}</td>
+                                <td>{{ keyword.latest_snapshot?.date ? formatDate(keyword.latest_snapshot.date) : 'Not synced' }}</td>
+                                <td>
+                                    <button type="button" class="btn btn-secondary" :disabled="removingKeywordId === keyword.id" @click="removeKeyword(keyword)">
+                                        <LoaderCircle v-if="removingKeywordId === keyword.id" class="size-4 animate-spin" />
+                                        Remove
+                                    </button>
+                                </td>
+                            </tr>
+                            <tr v-if="!props.trackedKeywords.length">
+                                <td colspan="6" class="text-zinc-500">No tracked keywords yet.</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </section>
+
             <section class="grid gap-4 xl:grid-cols-[1fr_.8fr]">
                 <div class="panel">
                     <div class="panel-header">
@@ -314,8 +422,8 @@ const updatePropertyStore = (property, storeId) => {
                                         <p class="font-semibold text-zinc-950">{{ row.query }}</p>
                                     </td>
                                     <td class="max-w-sm px-4 py-3 text-zinc-600">
-                                        <a v-if="row.page" :href="row.page" target="_blank" rel="noreferrer" class="inline-flex max-w-xs items-center gap-1 truncate text-teal-700 hover:text-teal-900">
-                                            <span class="truncate">{{ shortUrl(row.page) }}</span>
+                                        <a v-if="row.page" :href="row.page" target="_blank" rel="noreferrer" class="inline-flex max-w-xs items-center gap-1 text-teal-700 hover:text-teal-900">
+                                            <span>{{ shortUrl(row.page) }}</span>
                                             <ExternalLink class="size-3 shrink-0" />
                                         </a>
                                         <span v-else>No page</span>

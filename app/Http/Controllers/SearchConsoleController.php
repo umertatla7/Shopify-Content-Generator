@@ -8,10 +8,13 @@ use App\Models\KeywordPositionSnapshot;
 use App\Models\SearchConsoleConnection;
 use App\Models\SearchConsoleProperty;
 use App\Models\ShopifyStore;
+use App\Models\TrackedKeyword;
 use App\Services\Google\SearchConsoleService;
-use Illuminate\Support\Carbon;
+use App\Services\PlanLimitService;
+use App\Services\SystemSettingService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
@@ -21,7 +24,7 @@ use RuntimeException;
 
 class SearchConsoleController extends Controller
 {
-    public function index(Request $request): Response|RedirectResponse
+    public function index(Request $request, SystemSettingService $settings, PlanLimitService $planLimits): Response|RedirectResponse
     {
         if ($request->user()->isPlatformAdmin()) {
             return redirect()->route('admin.dashboard');
@@ -95,9 +98,17 @@ class SearchConsoleController extends Controller
                 'impressions' => (int) $row->impressions,
                 'position' => $row->position ? round((float) $row->position, 2) : null,
             ]);
+        $trackedKeywords = TrackedKeyword::query()
+            ->forAccount($account)
+            ->with(['store:id,name', 'latestSnapshot'])
+            ->where('status', 'active')
+            ->latest()
+            ->limit(25)
+            ->get();
 
         return Inertia::render('RankTracking/Index', [
-            'isConfigured' => filled(config('services.google_search_console.client_id')) && filled(config('services.google_search_console.client_secret')),
+            'isConfigured' => $settings->configured('google_search_console_client_id', config('services.google_search_console.client_id'))
+                && $settings->configured('google_search_console_client_secret', config('services.google_search_console.client_secret')),
             'connection' => SearchConsoleConnection::query()
                 ->forAccount($account)
                 ->with('user:id,name,email')
@@ -134,7 +145,55 @@ class SearchConsoleController extends Controller
             ],
             'topPages' => $topPages,
             'rankings' => $rankings,
+            'trackedKeywords' => $trackedKeywords,
+            'planUsage' => $planLimits->summary($account),
         ]);
+    }
+
+    public function storeTrackedKeyword(Request $request, SearchConsoleService $searchConsole, PlanLimitService $planLimits): RedirectResponse
+    {
+        $account = $this->account($request);
+        $this->authorizeRankTracking($request);
+
+        $validated = $request->validate([
+            'keyword' => ['required', 'string', 'max:255'],
+            'shopify_store_id' => [
+                'nullable',
+                Rule::exists('shopify_stores', 'id')->where('account_id', $account->id),
+            ],
+            'target_url' => ['nullable', 'url', 'max:1024'],
+            'intent' => ['nullable', 'string', 'max:255'],
+        ]);
+
+        $existing = TrackedKeyword::query()
+            ->forAccount($account)
+            ->where('keyword', Str::lower(trim((string) $validated['keyword'])))
+            ->where('status', 'active')
+            ->first();
+
+        if (! $existing) {
+            $planLimits->ensureWithinLimit($account, 'tracked_keywords');
+        }
+
+        $searchConsole->addTrackedKeyword($account, [
+            'shopify_store_id' => $validated['shopify_store_id'] ?? null,
+            'keyword' => $validated['keyword'],
+            'target_url' => $validated['target_url'] ?? null,
+            'intent' => $validated['intent'] ?? null,
+        ]);
+
+        return back()->with('status', 'Tracked keyword saved.');
+    }
+
+    public function destroyTrackedKeyword(Request $request, TrackedKeyword $trackedKeyword): RedirectResponse
+    {
+        $account = $this->account($request);
+        $this->authorizeRankTracking($request);
+        abort_unless((int) $trackedKeyword->account_id === (int) $account->id, 403);
+
+        $trackedKeyword->update(['status' => 'archived']);
+
+        return back()->with('status', 'Tracked keyword removed.');
     }
 
     public function connect(Request $request, SearchConsoleService $searchConsole): RedirectResponse

@@ -202,7 +202,7 @@ return new class extends Migration
             $table->json('payload')->nullable();
             $table->timestamps();
 
-            $table->unique(['shopify_store_id', 'shopify_article_id']);
+            $table->unique(['shopify_store_id', 'shopify_article_id'], 'ex_shop_blogs_store_article_uniq');
         });
 
         Schema::create('shopify_pages', function (Blueprint $table) {

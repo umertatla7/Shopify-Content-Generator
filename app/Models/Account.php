@@ -84,4 +84,9 @@ class Account extends Model
     {
         return $this->hasMany(AeoGeoVisibilityReport::class);
     }
+
+    public function subscriptions(): HasMany
+    {
+        return $this->hasMany(Subscription::class);
+    }
 }

@@ -8,7 +8,6 @@ use App\Models\Blog;
 use App\Models\ShopifyCollection;
 use App\Models\ShopifyStore;
 use App\Models\User;
-use Illuminate\Support\Arr;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Str;
 
@@ -277,6 +276,81 @@ class AeoGeoVisibilityService
                         : 'Expand this page with direct answers, policy details, and entity facts.'
                 ));
             });
+
+        $aboutPage = $store->pages->first(fn ($page) => Str::contains(Str::lower($page->title.' '.$page->body), ['about', 'story', 'our brand']));
+        $shippingPage = $store->pages->first(fn ($page) => Str::contains(Str::lower($page->title.' '.$page->body), ['shipping', 'delivery']));
+        $returnsPage = $store->pages->first(fn ($page) => Str::contains(Str::lower($page->title.' '.$page->body), ['return', 'refund', 'exchange']));
+        $knowledgeBase = $store->knowledgeBase;
+        $brandSummaryWords = $this->wordCount(($knowledgeBase?->summary ?? '').' '.($knowledgeBase?->editable_notes ?? ''));
+        $brandProfileWords = $this->wordCount(($knowledgeBase?->brand_profile ?? '').' '.($knowledgeBase?->audience_profile ?? ''));
+        $publishedBlogs = $store->blogs->where('status', Blog::STATUS_PUBLISHED);
+
+        $prompts->push($this->promptPayload(
+            prompt: "What is {$store->name} known for?",
+            intent: 'brand_overview',
+            entityType: ShopifyStore::class,
+            entityId: $store->id,
+            entityLabel: $store->name,
+            score: $this->clamp(($brandSummaryWords >= 120 ? 55 : ($brandSummaryWords >= 60 ? 35 : 12)) + ($aboutPage ? 20 : 0) + (filled($store->latestAnalysis?->niche) ? 15 : 0) + ($publishedBlogs->count() >= 3 ? 10 : 0)),
+            evidence: [
+                'brand_summary_words' => $brandSummaryWords,
+                'about_page' => (bool) $aboutPage,
+                'niche_defined' => filled($store->latestAnalysis?->niche),
+                'published_blogs' => $publishedBlogs->count(),
+            ],
+            sourceUrl: $aboutPage?->url ?: $store->shop_url,
+            recommendation: 'Clarify what the brand sells, who it serves, and what makes it distinct across About, homepage, and knowledge base content.'
+        ));
+
+        $prompts->push($this->promptPayload(
+            prompt: "Why should I buy from {$store->name}?",
+            intent: 'brand_differentiation',
+            entityType: ShopifyStore::class,
+            entityId: $store->id,
+            entityLabel: $store->name,
+            score: $this->clamp(($brandProfileWords >= 100 ? 50 : ($brandProfileWords >= 50 ? 32 : 10)) + (filled($store->brand_tone) ? 10 : 0) + ($aboutPage ? 15 : 0) + ($publishedBlogs->count() >= 4 ? 12 : 0) + ($knowledgeBase?->seo_opportunities ? 13 : 0)),
+            evidence: [
+                'brand_profile_words' => $brandProfileWords,
+                'brand_tone' => (bool) filled($store->brand_tone),
+                'about_page' => (bool) $aboutPage,
+                'published_blogs' => $publishedBlogs->count(),
+            ],
+            sourceUrl: $aboutPage?->url ?: $store->shop_url,
+            recommendation: 'Make differentiators explicit: craftsmanship, materials, service, guarantees, or expertise should appear in store copy and buying guides.'
+        ));
+
+        $prompts->push($this->promptPayload(
+            prompt: "Does {$store->name} have clear shipping and return policies?",
+            intent: 'brand_policy_clarity',
+            entityType: ShopifyStore::class,
+            entityId: $store->id,
+            entityLabel: $store->name,
+            score: $this->clamp(($shippingPage ? 35 : 0) + ($returnsPage ? 35 : 0) + (($shippingPage && $this->wordCount($shippingPage->body ?: $shippingPage->summary) >= 120) ? 15 : 0) + (($returnsPage && $this->wordCount($returnsPage->body ?: $returnsPage->summary) >= 120) ? 15 : 0)),
+            evidence: [
+                'shipping_page' => (bool) $shippingPage,
+                'returns_page' => (bool) $returnsPage,
+                'shipping_words' => $shippingPage ? $this->wordCount($shippingPage->body ?: $shippingPage->summary) : 0,
+                'returns_words' => $returnsPage ? $this->wordCount($returnsPage->body ?: $returnsPage->summary) : 0,
+            ],
+            sourceUrl: $shippingPage?->url ?: $returnsPage?->url ?: $store->shop_url,
+            recommendation: 'Create clear shipping, returns, refunds, and exchange pages with direct answers that AI systems can quote.'
+        ));
+
+        $prompts->push($this->promptPayload(
+            prompt: "Who is {$store->name} best for?",
+            intent: 'brand_audience_fit',
+            entityType: ShopifyStore::class,
+            entityId: $store->id,
+            entityLabel: $store->name,
+            score: $this->clamp(($brandProfileWords >= 90 ? 45 : ($brandProfileWords >= 45 ? 25 : 8)) + (filled($store->latestAnalysis?->target_audience) ? 25 : 0) + ($knowledgeBase?->audience_profile ? 20 : 0) + ($publishedBlogs->count() >= 3 ? 10 : 0)),
+            evidence: [
+                'audience_profile_words' => $this->wordCount($knowledgeBase?->audience_profile),
+                'analysis_audience' => (bool) filled($store->latestAnalysis?->target_audience),
+                'published_blogs' => $publishedBlogs->count(),
+            ],
+            sourceUrl: $aboutPage?->url ?: $store->shop_url,
+            recommendation: 'Explain the ideal customer, style, use cases, and buying intent more clearly in About copy, collection intros, and educational blogs.'
+        ));
 
         if ($prompts->isEmpty()) {
             $prompts->push($this->promptPayload(

@@ -17,6 +17,7 @@ class StoreAnalysisController extends Controller
         $this->authorize('view', $store);
 
         if (app()->environment('local') || config('queue.default') === 'sync') {
+            $this->extendExecutionLimit();
             $result = $analysis->analyze($store, $request->user());
 
             return back()->with('status', $result->status === 'completed'
@@ -27,5 +28,12 @@ class StoreAnalysisController extends Controller
         AnalyzeStoreJob::dispatch($store->id, $request->user()->id);
 
         return back()->with('status', 'Store analysis queued.');
+    }
+
+    private function extendExecutionLimit(int $seconds = 120): void
+    {
+        if (function_exists('set_time_limit')) {
+            @set_time_limit($seconds);
+        }
     }
 }

@@ -5,13 +5,14 @@ namespace App\Http\Controllers;
 use App\Models\Product;
 use App\Models\ShopifyStore;
 use App\Services\CreditService;
+use App\Services\PlanLimitService;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Inertia\Response;
 
 class ProductController extends Controller
 {
-    public function index(Request $request, CreditService $credits): Response
+    public function index(Request $request, CreditService $credits, PlanLimitService $planLimits): Response
     {
         $accountId = $request->user()->current_account_id;
 
@@ -44,6 +45,7 @@ class ProductController extends Controller
             'products' => $query->latest('last_synced_at')->paginate(15)->withQueryString(),
             'filters' => $filters,
             'credits' => $credits->summary($request->user()->currentAccount),
+            'planUsage' => $planLimits->summary($request->user()->currentAccount),
             'productCreditCosts' => [
                 'short' => $credits->productContentCost('short'),
                 'balanced' => $credits->productContentCost('balanced'),

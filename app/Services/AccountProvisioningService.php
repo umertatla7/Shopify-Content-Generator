@@ -17,9 +17,9 @@ class AccountProvisioningService
             'slug' => $this->uniqueSlug($accountName),
             'billing_email' => $user->email,
             'timezone' => config('app.timezone'),
-            'plan_key' => 'starter',
-            'credit_balance' => 1000,
-            'monthly_credit_allowance' => 1000,
+            'plan_key' => 'free',
+            'credit_balance' => 500,
+            'monthly_credit_allowance' => 500,
         ]);
 
         $role = Role::query()->where('name', $roleName)->first();

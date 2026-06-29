@@ -8,6 +8,7 @@ const props = defineProps({
     products: Object,
     filters: Object,
     credits: Object,
+    planUsage: Object,
     productCreditCosts: Object,
     stores: Array,
     filterOptions: Object,
@@ -49,6 +50,7 @@ const productCountLabel = computed(() => {
 
 const selectedStyleCost = computed(() => props.productCreditCosts[contentForm.value.description_style] ?? props.productCreditCosts.balanced);
 const hasEnoughCredits = computed(() => selectedStyleCost.value <= creditBalance.value);
+const productMetric = computed(() => props.planUsage?.metrics?.product_descriptions ?? null);
 
 const plainDescription = (html) => {
     if (!html) return 'No description synced from Shopify.';
@@ -57,6 +59,7 @@ const plainDescription = (html) => {
 
 const productUrl = (product) => {
     if (!product) return '';
+    if (!['active', 'published'].includes(String(product.status || '').toLowerCase())) return '';
 
     if (product.url) return product.url;
 
@@ -64,6 +67,8 @@ const productUrl = (product) => {
 
     return baseUrl && product.handle ? `${baseUrl.replace(/\/$/, '')}/products/${product.handle}` : '';
 };
+
+const isDraftProduct = (product) => String(product?.status || '').toLowerCase() === 'draft';
 
 const replaceProduct = (product) => {
     const index = props.products.data.findIndex((item) => item.id === product.id);
@@ -119,7 +124,7 @@ const generateContent = async () => {
     }
 };
 
-const pushContent = async () => {
+const pushContent = async (publish = false) => {
     if (!selected.value) return;
 
     contentError.value = '';
@@ -132,6 +137,7 @@ const pushContent = async () => {
             generated_description: contentForm.value.generated_description,
             generated_seo_title: contentForm.value.generated_seo_title,
             generated_seo_description: contentForm.value.generated_seo_description,
+            publish,
         }, { headers: { Accept: 'application/json' } });
 
         replaceProduct(response.data.product);
@@ -155,7 +161,12 @@ const pushContent = async () => {
                     <h2 class="text-sm font-bold text-zinc-950">Synced Shopify Products</h2>
                     <p class="text-xs text-zinc-500">{{ productCountLabel }}</p>
                 </div>
-                <Link href="/stores" class="btn btn-secondary">Manage stores</Link>
+                <div class="flex flex-wrap items-center gap-2">
+                    <div v-if="productMetric" class="rounded-md border border-zinc-200 bg-zinc-50 px-3 py-2 text-xs font-semibold text-zinc-700">
+                        {{ productMetric.used }}/{{ productMetric.limit ?? 'Unlimited' }} product descriptions used this month
+                    </div>
+                    <Link href="/stores" class="btn btn-secondary">Manage stores</Link>
+                </div>
             </div>
 
             <div class="panel-body border-b border-zinc-200">
@@ -219,7 +230,7 @@ const pushContent = async () => {
                     <tbody>
                         <tr v-for="product in props.products.data" :key="product.id">
                             <td>
-                                <div class="flex min-w-72 items-center gap-3">
+                                <div class="flex items-center gap-3">
                                     <img
                                         v-if="product.image_url"
                                         :src="product.image_url"
@@ -228,7 +239,7 @@ const pushContent = async () => {
                                     />
                                     <div v-else class="grid size-14 place-items-center rounded-md border border-dashed border-zinc-300 text-xs text-zinc-400">No image</div>
                                     <div>
-                                        <button class="two-line-title max-w-80 text-left font-semibold text-zinc-950 hover:text-teal-700" type="button" @click="openProduct(product)">
+                                        <button class="two-line-title max-w-64 text-left font-semibold text-zinc-950 hover:text-teal-700" type="button" @click="openProduct(product)">
                                             {{ product.title }}
                                         </button>
                                     </div>
@@ -239,7 +250,7 @@ const pushContent = async () => {
                             <td>{{ product.vendor || '-' }}</td>
                             <td><span class="badge" :class="`badge-${product.status || 'draft'}`">{{ product.status || 'unknown' }}</span></td>
                             <td>
-                                <div class="max-w-48 truncate text-xs text-zinc-600">{{ product.seo_title || product.seo_description || 'No SEO fields synced' }}</div>
+                                <div class="max-w-48 text-xs text-zinc-600">{{ product.seo_title || product.seo_description || 'No SEO fields synced' }}</div>
                             </td>
                             <td>{{ product.last_synced_at ? new Date(product.last_synced_at).toLocaleString() : '-' }}</td>
                             <td>
@@ -377,10 +388,15 @@ const pushContent = async () => {
                                     <Sparkles v-else class="size-4" />
                                     Generate title and description
                                 </button>
-                                <button class="btn btn-secondary" type="button" :disabled="pushingContent || !contentForm.generated_title || !contentForm.generated_description" @click="pushContent">
+                                <button class="btn btn-secondary" type="button" :disabled="pushingContent || !contentForm.generated_title || !contentForm.generated_description" @click="pushContent(false)">
                                     <LoaderCircle v-if="pushingContent" class="size-4 animate-spin" />
                                     <UploadCloud v-else class="size-4" />
                                     Push to Shopify
+                                </button>
+                                <button v-if="isDraftProduct(selected)" class="btn btn-primary" type="button" :disabled="pushingContent || !contentForm.generated_title || !contentForm.generated_description" @click="pushContent(true)">
+                                    <LoaderCircle v-if="pushingContent" class="size-4 animate-spin" />
+                                    <UploadCloud v-else class="size-4" />
+                                    Push & publish
                                 </button>
                             </div>
 

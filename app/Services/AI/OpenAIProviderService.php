@@ -2,20 +2,23 @@
 
 namespace App\Services\AI;
 
+use App\Services\SystemSettingService;
 use Illuminate\Support\Facades\Http;
 use RuntimeException;
 
 class OpenAIProviderService implements AIProviderInterface
 {
+    public function __construct(private readonly SystemSettingService $settings) {}
+
     public function generate(string $prompt, array $options = []): array
     {
-        $apiKey = config('services.openai.api_key');
+        $apiKey = $this->settings->get('openai_api_key', config('services.openai.api_key'));
 
         if (! $apiKey) {
             throw new RuntimeException('OPENAI_API_KEY is not configured.');
         }
 
-        $model = $options['model'] ?? config('services.openai.model', 'gpt-4.1-mini');
+        $model = $options['model'] ?? $this->settings->get('openai_model', config('services.openai.model', 'gpt-4.1-mini'));
 
         $payload = [
             'model' => $model,
@@ -38,7 +41,7 @@ class OpenAIProviderService implements AIProviderInterface
 
         $response = Http::withToken($apiKey)
             ->timeout((int) ($options['timeout'] ?? config('services.openai.timeout', 60)))
-            ->post(rtrim(config('services.openai.base_url', 'https://api.openai.com/v1'), '/').'/chat/completions', $payload);
+            ->post(rtrim($this->settings->get('openai_base_url', config('services.openai.base_url', 'https://api.openai.com/v1')), '/').'/chat/completions', $payload);
 
         if ($response->failed()) {
             throw new RuntimeException($response->json('error.message') ?? 'OpenAI request failed.');

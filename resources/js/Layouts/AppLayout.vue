@@ -16,17 +16,35 @@ import {
     ShoppingBag,
     Users,
     Building2,
+    CreditCard,
 } from 'lucide-vue-next';
 
 const page = usePage();
 const auth = computed(() => page.props.auth ?? {});
 const permissions = computed(() => auth.value.permissions ?? {});
 const isAdmin = computed(() => Boolean(auth.value.user?.is_platform_admin));
+const shopify = computed(() => page.props.shopify ?? {});
 const brandLogo = '/images/growthpilot-ai-logo.png';
+const contextQuery = computed(() => {
+    const query = new URLSearchParams();
+
+    if (shopify.value.shop) query.set('shop', shopify.value.shop);
+    if (shopify.value.host) query.set('host', shopify.value.host);
+    if (shopify.value.embedded) query.set('embedded', '1');
+
+    return query.toString();
+});
+
+const withShopifyContext = (href) => {
+    if (!contextQuery.value) return href;
+
+    return href.includes('?') ? `${href}&${contextQuery.value}` : `${href}?${contextQuery.value}`;
+};
 
 const customerItems = computed(() => [
     { href: '/dashboard', label: 'Dashboard', icon: BarChart3, show: true },
     { href: '/stores', label: 'Stores', icon: ShoppingBag, show: permissions.value['stores.manage'] || permissions.value['stores.sync'] },
+    { href: '/billing', label: 'Billing', icon: CreditCard, show: permissions.value['billing.manage'] || permissions.value['stores.manage'] },
     { href: '/products', label: 'Products', icon: Package, show: permissions.value['stores.view'] || permissions.value['stores.manage'] || permissions.value['stores.sync'] },
     { href: '/collections', label: 'Collections', icon: Layers, show: permissions.value['stores.view'] || permissions.value['stores.manage'] || permissions.value['stores.sync'] },
     { href: '/rank-tracking', label: 'Rank Tracking', icon: LineChart, show: permissions.value['stores.view'] || permissions.value['blogs.edit'] },
@@ -42,6 +60,7 @@ const adminItems = [
     { href: '/admin/users', label: 'Users', icon: Users, show: true },
     { href: '/admin/accounts', label: 'Accounts', icon: Building2, show: true },
     { href: '/admin/plans', label: 'Plans', icon: Package, show: true },
+    { href: '/admin/settings', label: 'Settings', icon: Settings, show: true },
     { href: '/admin/stores', label: 'Stores', icon: ShoppingBag, show: true },
     { href: '/admin/topics', label: 'Topics', icon: Lightbulb, show: true },
     { href: '/admin/blogs', label: 'Blogs', icon: FileText, show: true },
@@ -73,7 +92,7 @@ const logout = () => router.delete('/logout');
                 <Link
                     v-for="item in items.filter((item) => item.show)"
                     :key="item.href"
-                    :href="item.href"
+                    :href="withShopifyContext(item.href)"
                     class="flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition"
                     :class="isActive(item.href) ? 'bg-teal-50 text-teal-800' : 'text-zinc-600 hover:bg-zinc-100 hover:text-zinc-950'"
                 >
@@ -90,11 +109,14 @@ const logout = () => router.delete('/logout');
                         <h1 class="text-base font-bold text-zinc-950">
                             <slot name="title">Dashboard</slot>
                         </h1>
-                        <p class="text-xs text-zinc-500">{{ auth.user?.name }} · {{ isAdmin ? 'super admin' : auth.account?.plan_key ?? 'starter' }}</p>
+                        <p class="text-xs text-zinc-500">
+                            {{ auth.user?.name }} · {{ isAdmin ? 'super admin' : auth.account?.plan_key ?? 'free' }}
+                            <span v-if="shopify.embedded" class="ml-2 rounded-full bg-teal-50 px-2 py-0.5 text-[11px] font-semibold text-teal-800">Shopify App Home</span>
+                        </p>
                     </div>
 
                     <div class="flex items-center gap-2">
-                        <Link :href="isAdmin ? '/admin/accounts' : '/stores'" class="btn btn-secondary">
+                        <Link :href="withShopifyContext(isAdmin ? '/admin/settings' : '/stores')" class="btn btn-secondary">
                             <Settings class="size-4" />
                             <span class="hidden sm:inline">Settings</span>
                         </Link>
@@ -109,7 +131,7 @@ const logout = () => router.delete('/logout');
                     <Link
                         v-for="item in items.filter((item) => item.show)"
                         :key="item.href"
-                        :href="item.href"
+                        :href="withShopifyContext(item.href)"
                         class="flex shrink-0 items-center gap-2 rounded-md px-3 py-2 text-sm font-medium"
                         :class="isActive(item.href) ? 'bg-teal-50 text-teal-800' : 'text-zinc-600'"
                     >

@@ -13,7 +13,7 @@ const props = defineProps({
 });
 
 const packageForm = useForm({
-    plan_key: props.account.plan_key ?? 'starter',
+    plan_key: props.account.plan_key ?? 'free',
     monthly_credit_allowance: props.account.monthly_credit_allowance ?? 0,
     credit_balance: props.account.credit_balance ?? 0,
     credits_expire_at: props.account.credits_expire_at ? props.account.credits_expire_at.slice(0, 10) : '',

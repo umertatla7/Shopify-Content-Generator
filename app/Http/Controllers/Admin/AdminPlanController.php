@@ -17,7 +17,10 @@ class AdminPlanController extends Controller
         abort_unless($request->user()->isPlatformAdmin(), 403);
 
         return Inertia::render('Admin/Plans/Index', [
-            'plans' => Plan::query()->orderBy('id')->get(),
+            'plans' => Plan::query()
+                ->orderByRaw("case `key` when 'free' then 1 when 'growth' then 2 when 'pro' then 3 else 99 end")
+                ->orderBy('id')
+                ->get(),
         ]);
     }
 
@@ -55,7 +58,13 @@ class AdminPlanController extends Controller
             'user_limit' => ['nullable', 'integer', 'min:0', 'max:100000'],
             'product_description_limit' => ['nullable', 'integer', 'min:0', 'max:1000000'],
             'collection_description_limit' => ['nullable', 'integer', 'min:0', 'max:1000000'],
+            'monthly_seo_report_limit' => ['nullable', 'integer', 'min:0', 'max:1000000'],
+            'monthly_ai_visibility_report_limit' => ['nullable', 'integer', 'min:0', 'max:1000000'],
+            'monthly_image_optimization_limit' => ['nullable', 'integer', 'min:0', 'max:1000000'],
+            'monthly_image_alt_text_limit' => ['nullable', 'integer', 'min:0', 'max:1000000'],
+            'tracked_keyword_limit' => ['nullable', 'integer', 'min:0', 'max:1000000'],
             'credit_expires_after_days' => ['nullable', 'integer', 'min:0', 'max:3650'],
+            'shopify_billing_plan_handle' => ['nullable', 'string', 'max:128'],
             'features' => ['nullable', 'array'],
             'features.*' => ['string', 'max:255'],
             'is_active' => ['boolean'],

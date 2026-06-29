@@ -4,8 +4,8 @@ namespace App\Http\Controllers;
 
 use App\Jobs\GenerateBlogJob;
 use App\Jobs\GenerateBlogTopicsJob;
-use App\Models\BlogTopic;
 use App\Models\AIGeneration;
+use App\Models\BlogTopic;
 use App\Models\ShopifyCollection;
 use App\Models\ShopifyStore;
 use App\Services\BlogGenerationService;
@@ -13,9 +13,10 @@ use App\Services\BlogTopicService;
 use App\Services\CreditService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
-use RuntimeException;
+use Illuminate\Support\Collection;
 use Inertia\Inertia;
 use Inertia\Response;
+use RuntimeException;
 
 class BlogTopicController extends Controller
 {
@@ -32,13 +33,16 @@ class BlogTopicController extends Controller
         $credits = app(CreditService::class);
 
         return Inertia::render('Topics/Index', [
-            'stores' => ShopifyStore::forAccount($accountId)->get(['id', 'name', 'country', 'default_language', 'primary_locale', 'timezone']),
+            'stores' => ShopifyStore::query()
+                ->forAccount($accountId)
+                ->withCount(['products', 'collections', 'blogs'])
+                ->get(['id', 'name', 'country', 'default_language', 'primary_locale', 'timezone']),
             'credits' => $credits->summary($request->user()->currentAccount),
             'topicCreditCost' => CreditService::TOPIC_CREDITS,
             'collections' => ShopifyCollection::query()
                 ->forAccount($accountId)
                 ->orderBy('title')
-                ->get(['id', 'shopify_store_id', 'title', 'handle']),
+                ->get(['id', 'shopify_store_id', 'shopify_collection_id', 'title', 'handle', 'product_count']),
             'latestGeneration' => AIGeneration::query()
                 ->forAccount($accountId)
                 ->where('type', 'topic_generation')
@@ -94,12 +98,22 @@ class BlogTopicController extends Controller
             ->forAccount($store->account_id)
             ->where('shopify_store_id', $store->id)
             ->whereIn('id', $validated['collection_ids'] ?? [])
-            ->get(['id', 'title', 'handle']);
+            ->get(['id', 'shopify_collection_id', 'title', 'handle', 'product_count']);
+
+        $recommendedLimit = $this->recommendedTopicLimit($store, $selectedCollections);
+
+        if ((int) $validated['count'] > $recommendedLimit) {
+            return back()->withErrors([
+                'count' => "This store data can support about {$recommendedLimit} unique topic ideas in one batch. Select more collections, sync more products, or lower the topic count.",
+            ]);
+        }
 
         $validated['collections'] = $selectedCollections->map(fn (ShopifyCollection $collection) => [
             'id' => $collection->id,
+            'shopify_collection_id' => $collection->shopify_collection_id,
             'title' => $collection->title,
             'handle' => $collection->handle,
+            'product_count' => $collection->product_count,
         ])->values()->all();
         $validated['collection_titles'] = $selectedCollections->pluck('title')->values()->all();
         $validated['target_region'] = $this->targetRegion($validated);
@@ -150,6 +164,16 @@ class BlogTopicController extends Controller
             'faq_answer_engine' => 'FAQ / Answer Engine',
             'product_education' => 'Product Education',
         ][$intent] ?? $intent;
+    }
+
+    private function recommendedTopicLimit(ShopifyStore $store, Collection $selectedCollections): int
+    {
+        $productCount = $selectedCollections->isNotEmpty()
+            ? (int) $selectedCollections->sum(fn (ShopifyCollection $collection): int => (int) ($collection->product_count ?? 0))
+            : $store->products()->count();
+        $collectionCount = max(1, $selectedCollections->count() ?: $store->collections()->count());
+
+        return max(3, min(25, (int) ceil(sqrt(max(1, $productCount)) * 2) + max(0, $collectionCount - 1)));
     }
 
     public function update(Request $request, BlogTopic $topic): RedirectResponse

@@ -17,7 +17,9 @@ const submit = () => form.post('/login');
     <AuthLayout>
         <div class="mb-6">
             <h1 class="text-xl font-bold text-zinc-950">Sign in</h1>
-            <p class="mt-1 text-sm text-zinc-500">Access your Shopify content dashboard.</p>
+            <p class="mt-1 text-sm text-zinc-500">
+                {{ page.props.shopify?.shop ? `Finish connecting ${page.props.shopify.shop} to your workspace.` : 'Access your Shopify content dashboard.' }}
+            </p>
         </div>
 
         <div v-if="page.props.flash?.status" class="mb-4 rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800">

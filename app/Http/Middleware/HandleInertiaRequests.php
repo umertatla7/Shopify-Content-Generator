@@ -2,6 +2,7 @@
 
 namespace App\Http\Middleware;
 
+use App\Support\ShopifyContext;
 use Illuminate\Http\Request;
 use Inertia\Middleware;
 
@@ -37,6 +38,7 @@ class HandleInertiaRequests extends Middleware
     {
         $user = $request->user();
         $account = $user?->currentAccount;
+        $shopifyContext = app(ShopifyContext::class)->props($request);
 
         return [
             ...parent::share($request),
@@ -64,9 +66,11 @@ class HandleInertiaRequests extends Middleware
                     'blogs.edit' => $user->hasAccountPermission('blogs.edit'),
                     'blogs.approve' => $user->hasAccountPermission('blogs.approve'),
                     'blogs.publish' => $user->hasAccountPermission('blogs.publish'),
+                    'billing.manage' => $user->hasAccountPermission('billing.manage'),
                     'team.manage' => $user->hasAccountPermission('team.manage'),
                 ] : [],
             ],
+            'shopify' => $shopifyContext,
             'flash' => [
                 'status' => fn () => $request->session()->get('status'),
             ],

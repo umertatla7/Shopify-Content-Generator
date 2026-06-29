@@ -17,10 +17,12 @@ class StoreAnalysisService
     public function __construct(
         private readonly AIProviderService $ai,
         private readonly UsageTrackingService $usage,
+        private readonly SystemSettingService $settings,
     ) {}
 
     public function analyze(ShopifyStore $store, ?User $user = null): StoreAnalysis
     {
+        $this->extendExecutionLimit();
         $baseAudit = $this->baseAudit($store);
         $prompt = $this->prompt($store, $baseAudit);
 
@@ -373,17 +375,21 @@ class StoreAnalysisService
 
         foreach (['mobile', 'desktop'] as $strategy) {
             try {
+                $timeout = max(5, min((int) config('services.pagespeed.timeout', 45), 12));
                 $query = [
                     'url' => $store->shop_url,
                     'strategy' => $strategy,
                     'category' => 'performance',
                 ];
 
-                if (config('services.pagespeed.api_key')) {
-                    $query['key'] = config('services.pagespeed.api_key');
+                $apiKey = $this->settings->get('pagespeed_insights_api_key', config('services.pagespeed.api_key'));
+
+                if ($apiKey) {
+                    $query['key'] = $apiKey;
                 }
 
-                $response = Http::timeout((int) config('services.pagespeed.timeout', 45))
+                $response = Http::connectTimeout(5)
+                    ->timeout($timeout)
                     ->get('https://www.googleapis.com/pagespeedonline/v5/runPagespeed', $query);
 
                 if ($response->failed()) {
@@ -410,6 +416,13 @@ class StoreAnalysisService
             'source_label' => $reports['mobile']['source_label'],
             'note' => 'Mobile and desktop are shown separately. If PageSpeed is unavailable, values are marked as crawl estimates.',
         ];
+    }
+
+    private function extendExecutionLimit(int $seconds = 120): void
+    {
+        if (function_exists('set_time_limit')) {
+            @set_time_limit($seconds);
+        }
     }
 
     private function pageSpeedReport(array $payload, array $fallback, string $strategy): array
@@ -662,7 +675,7 @@ class StoreAnalysisService
             ];
         }
 
-        $dom = new \DOMDocument();
+        $dom = new \DOMDocument;
         $previous = libxml_use_internal_errors(true);
         $dom->loadHTML($html);
         libxml_clear_errors();

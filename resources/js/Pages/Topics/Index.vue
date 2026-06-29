@@ -121,6 +121,16 @@ const cities = computed(() => regionOptions[form.target_country]?.[form.target_s
 const storeCollections = computed(() => props.collections.filter((collection) => String(collection.shopify_store_id) === String(form.store_id)));
 const generationCreditCost = computed(() => Math.max(1, Number(form.count || 1)) * props.topicCreditCost);
 const hasEnoughCredits = computed(() => generationCreditCost.value <= props.credits.balance);
+const recommendedTopicLimit = computed(() => {
+    const store = selectedStore.value;
+    if (!store) return 3;
+
+    const productCount = Number(store.products_count ?? 0);
+    const collectionCount = form.collection_ids.length || Number(store.collections_count ?? 1);
+
+    return Math.max(3, Math.min(25, Math.ceil(Math.sqrt(Math.max(1, productCount)) * 2) + Math.max(0, collectionCount - 1)));
+});
+const exceedsRecommendedTopicLimit = computed(() => Number(form.count || 0) > recommendedTopicLimit.value);
 const waitingTopics = computed(() => props.topics.data ?? []);
 const approvedTopicCards = computed(() => props.approvedTopics.data ?? []);
 const rejectedTopicCards = computed(() => props.rejectedTopics.data ?? []);
@@ -248,6 +258,9 @@ const generateSelectedBlogs = () => {
                         <div>
                             <label>Topics</label>
                             <input v-model="form.count" type="number" min="1" max="25" />
+                            <p class="mt-1 text-xs" :class="exceedsRecommendedTopicLimit ? 'font-semibold text-rose-700' : 'text-zinc-500'">
+                                Recommended max for this store data: {{ recommendedTopicLimit }} topics.
+                            </p>
                         </div>
                         <div>
                             <label>Intent</label>
@@ -339,11 +352,12 @@ const generateSelectedBlogs = () => {
                             <div class="flex justify-between gap-3"><span class="text-zinc-500">Credits remaining</span><span class="font-semibold text-zinc-950">{{ props.credits.balance.toLocaleString() }}</span></div>
                             <div class="mt-1 flex justify-between gap-3"><span class="text-zinc-500">This generation</span><span class="font-semibold text-zinc-950">{{ generationCreditCost }} credits</span></div>
                             <p v-if="!hasEnoughCredits" class="mt-2 text-xs font-semibold text-rose-700">Not enough credits for this topic batch.</p>
+                            <p v-if="exceedsRecommendedTopicLimit" class="mt-2 text-xs font-semibold text-rose-700">Lower the topic count or select/sync more product data to avoid repeated or weak ideas.</p>
                         </div>
                     </div>
 
                     <div class="flex justify-end">
-                        <button class="btn btn-primary min-w-48" :disabled="form.processing || !form.store_id || !hasEnoughCredits">
+                        <button class="btn btn-primary min-w-48" :disabled="form.processing || !form.store_id || !hasEnoughCredits || exceedsRecommendedTopicLimit">
                             <LoaderCircle v-if="form.processing" class="size-4 animate-spin" />
                             <Sparkles v-else class="size-4" />
                             Generate Topic

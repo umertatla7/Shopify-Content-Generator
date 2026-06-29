@@ -9,6 +9,7 @@ use App\Models\StoreAnalysis;
 use App\Models\User;
 use App\Services\AI\AIProviderService;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Str;
 use Throwable;
 
 class BlogTopicService
@@ -63,34 +64,49 @@ class BlogTopicService
                 'completed_at' => now(),
             ]);
 
-            $topics = collect($payload['topics'] ?? [])->take($count)->map(function (array $topic) use ($store, $analysis, $generation, $options): BlogTopic {
-                $tones = $options['tone'] ?? [];
-                $tone = is_array($tones) ? implode(', ', $tones) : $tones;
+            $existingFingerprints = $this->existingTopicFingerprints($store);
+            $seenFingerprints = [];
+            $topics = collect($payload['topics'] ?? [])
+                ->filter(function (array $topic) use ($existingFingerprints, &$seenFingerprints): bool {
+                    $fingerprint = $this->topicFingerprint($topic['title'] ?? $topic['primary_keyword'] ?? '');
 
-                return BlogTopic::query()->create([
-                    'account_id' => $store->account_id,
-                    'shopify_store_id' => $store->id,
-                    'store_analysis_id' => $analysis?->id,
-                    'ai_generation_id' => $generation->id,
-                    'title' => $topic['title'] ?? 'Untitled SEO blog topic',
-                    'primary_keyword' => $topic['primary_keyword'] ?? null,
-                    'secondary_keywords' => $topic['secondary_keywords'] ?? [],
-                    'search_intent' => $topic['search_intent'] ?? ($options['intent_label'] ?? $options['intent'] ?? null),
-                    'suggested_outline' => $topic['suggested_outline'] ?? [],
-                    'related_products' => $topic['related_products'] ?? [],
-                    'related_collections' => $topic['related_collections'] ?? ($options['collections'] ?? []),
-                    'opportunity_score' => $topic['opportunity_score'] ?? null,
-                    'estimated_article_size' => $topic['estimated_article_size'] ?? $topic['estimated_word_count'] ?? '1,200-1,600 words',
-                    'target_region' => $options['target_region'] ?? $store->country,
-                    'target_language' => $options['target_language'] ?? $store->default_language,
-                    'tone' => $tone ?: $store->brand_tone,
-                    'seo_focus' => $options['seo_focus'] ?? null,
-                    'product_category' => $options['product_category'] ?? implode(', ', $options['collection_titles'] ?? []),
-                    'status' => 'generated',
-                    'prompt' => $generation->prompt,
-                    'response' => $topic,
-                ]);
-            });
+                    if ($fingerprint === '' || in_array($fingerprint, $seenFingerprints, true) || in_array($fingerprint, $existingFingerprints, true)) {
+                        return false;
+                    }
+
+                    $seenFingerprints[] = $fingerprint;
+
+                    return true;
+                })
+                ->take($count)
+                ->map(function (array $topic) use ($store, $analysis, $generation, $options): BlogTopic {
+                    $tones = $options['tone'] ?? [];
+                    $tone = is_array($tones) ? implode(', ', $tones) : $tones;
+
+                    return BlogTopic::query()->create([
+                        'account_id' => $store->account_id,
+                        'shopify_store_id' => $store->id,
+                        'store_analysis_id' => $analysis?->id,
+                        'ai_generation_id' => $generation->id,
+                        'title' => $topic['title'] ?? 'Untitled SEO blog topic',
+                        'primary_keyword' => $topic['primary_keyword'] ?? null,
+                        'secondary_keywords' => $topic['secondary_keywords'] ?? [],
+                        'search_intent' => $topic['search_intent'] ?? ($options['intent_label'] ?? $options['intent'] ?? null),
+                        'suggested_outline' => $topic['suggested_outline'] ?? [],
+                        'related_products' => $topic['related_products'] ?? [],
+                        'related_collections' => $topic['related_collections'] ?? ($options['collections'] ?? []),
+                        'opportunity_score' => $topic['opportunity_score'] ?? null,
+                        'estimated_article_size' => $topic['estimated_article_size'] ?? $topic['estimated_word_count'] ?? '1,200-1,600 words',
+                        'target_region' => $options['target_region'] ?? $store->country,
+                        'target_language' => $options['target_language'] ?? $store->default_language,
+                        'tone' => $tone ?: $store->brand_tone,
+                        'seo_focus' => $options['seo_focus'] ?? null,
+                        'product_category' => $options['product_category'] ?? implode(', ', $options['collection_titles'] ?? []),
+                        'status' => 'generated',
+                        'prompt' => $generation->prompt,
+                        'response' => $topic,
+                    ]);
+                });
 
             $this->usage->record($store->account_id, 'ai_generation', (int) ($result['usage']['total_tokens'] ?? 1), 'token', $generation, $user, [
                 'shopify_store_id' => $store->id,
@@ -131,8 +147,16 @@ class BlogTopicService
     private function prompt(ShopifyStore $store, ?StoreAnalysis $analysis, array $options, int $count): string
     {
         $knowledgeBase = $store->knowledgeBase()->first();
+        $selectedCollections = collect($options['collections'] ?? []);
+        $products = $this->productContext($store, $options);
+        $existingTopics = BlogTopic::query()
+            ->where('shopify_store_id', $store->id)
+            ->latest()
+            ->limit(60)
+            ->get(['title', 'primary_keyword', 'search_intent', 'product_category'])
+            ->toArray();
 
-        return 'Generate SEO and AEO blog topic ideas for this Shopify store based on the editable store knowledge base and selected filters. Return JSON {"topics":[{"title":"","primary_keyword":"","secondary_keywords":[],"search_intent":"","suggested_category":"","estimated_article_size":"1200-1500 words","suggested_outline":[],"related_products":[],"related_collections":[],"opportunity_score":80}]}. '.
+        return 'Generate SEO and AEO blog topic ideas for this Shopify store based on the editable store knowledge base and selected filters. Return JSON {"topics":[{"title":"","primary_keyword":"","secondary_keywords":[],"search_intent":"","suggested_category":"","estimated_article_size":"1200-1500 words","suggested_outline":[],"related_products":[],"related_collections":[],"opportunity_score":80}]}. Each topic must be unique, specific, and tied to the selected collections/products. Do not create topics for unrelated product families. Do not repeat existing topic angles, titles, or primary keywords. If selected collections are provided, every topic must clearly relate to those collections. '.
             json_encode([
                 'count' => $count,
                 'store' => $store->only(['name', 'shop_domain', 'country', 'currency', 'default_language', 'primary_locale', 'timezone', 'brand_tone']),
@@ -148,8 +172,69 @@ class BlogTopicService
                 ] : null,
                 'analysis' => $analysis?->response,
                 'options' => $options,
-                'products' => $store->products()->limit(25)->get(['id', 'title', 'handle', 'product_type'])->toArray(),
-                'collections' => $store->collections()->limit(15)->get(['id', 'title', 'handle'])->toArray(),
+                'selected_collections' => $selectedCollections->values()->all(),
+                'products' => $products,
+                'collections' => $selectedCollections->isNotEmpty()
+                    ? $selectedCollections->values()->all()
+                    : $store->collections()->limit(15)->get(['id', 'shopify_collection_id', 'title', 'handle', 'product_count'])->toArray(),
+                'existing_topics_to_avoid' => $existingTopics,
             ]);
+    }
+
+    private function productContext(ShopifyStore $store, array $options): array
+    {
+        $selectedCollectionGids = collect($options['collections'] ?? [])
+            ->pluck('shopify_collection_id')
+            ->filter()
+            ->values();
+
+        $products = $store->products()
+            ->limit(80)
+            ->get(['id', 'title', 'handle', 'product_type', 'collections'])
+            ->filter(function ($product) use ($selectedCollectionGids): bool {
+                if ($selectedCollectionGids->isEmpty()) {
+                    return true;
+                }
+
+                return collect($product->collections ?? [])
+                    ->pluck('id')
+                    ->intersect($selectedCollectionGids)
+                    ->isNotEmpty();
+            })
+            ->take(35)
+            ->values();
+
+        return $products->map(fn ($product): array => [
+            'id' => $product->id,
+            'title' => $product->title,
+            'handle' => $product->handle,
+            'product_type' => $product->product_type,
+            'collections' => collect($product->collections ?? [])->pluck('title')->filter()->values()->all(),
+        ])->all();
+    }
+
+    private function existingTopicFingerprints(ShopifyStore $store): array
+    {
+        return BlogTopic::query()
+            ->where('shopify_store_id', $store->id)
+            ->latest()
+            ->limit(100)
+            ->get(['title', 'primary_keyword'])
+            ->flatMap(fn (BlogTopic $topic): array => [$topic->title, $topic->primary_keyword])
+            ->map(fn (?string $value): string => $this->topicFingerprint($value))
+            ->filter()
+            ->unique()
+            ->values()
+            ->all();
+    }
+
+    private function topicFingerprint(?string $value): string
+    {
+        return Str::of((string) $value)
+            ->lower()
+            ->replaceMatches('/[^a-z0-9\s]/', ' ')
+            ->replaceMatches('/\b(the|a|an|and|or|for|to|of|in|with|your|our|best|guide|how)\b/', ' ')
+            ->squish()
+            ->toString();
     }
 }

@@ -1,6 +1,6 @@
 <script setup>
-import { ref } from 'vue';
-import { Head, Link, router, useForm } from '@inertiajs/vue3';
+import { computed, ref } from 'vue';
+import { Head, Link, router, useForm, usePage } from '@inertiajs/vue3';
 import AppLayout from '@/Layouts/AppLayout.vue';
 import { AlertTriangle, Brain, CheckCircle2, Gauge, ImageOff, MousePointerClick, Move, Plus, RefreshCw, Server, Timer, Trash2, X } from 'lucide-vue-next';
 
@@ -10,6 +10,9 @@ const props = defineProps({
     storeCount: Number,
     canAddStore: Boolean,
 });
+
+const page = usePage();
+const shopify = computed(() => page.props.shopify ?? {});
 
 const showConnectForm = ref(false);
 const openConnectForm = () => {
@@ -55,12 +58,20 @@ const form = useForm({
     brand_tone: '',
 });
 
+const oauthForm = useForm({
+    shop: '',
+});
+
 const submit = () => form.post('/stores', {
     preserveScroll: true,
     onSuccess: () => {
         form.reset('name', 'shop_url', 'api_key', 'client_secret', 'admin_api_access_token', 'country', 'brand_tone');
         showConnectForm.value = false;
     },
+});
+
+const connectWithShopify = () => oauthForm.get('/shopify/install/start', {
+    preserveScroll: true,
 });
 
 const sync = (store) => router.post(`/stores/${store.id}/sync`, {}, { preserveScroll: true });
@@ -204,10 +215,17 @@ const formatBytes = (bytes) => {
 
         <div class="space-y-6">
             <div class="flex justify-end">
+                <Link href="/billing" class="btn btn-secondary">
+                    View billing
+                </Link>
                 <button class="btn btn-primary" type="button" :disabled="!props.canAddStore" @click="openConnectForm">
                     <Plus class="size-4" />
                     Connect new store
                 </button>
+            </div>
+
+            <div class="rounded-md border border-sky-200 bg-sky-50 px-4 py-3 text-sm text-sky-900">
+                For App Store launch, store access will come from Shopify install and OAuth. This manual credential form stays available for local development while we finish the public-app onboarding flow.
             </div>
 
             <div v-if="!props.canAddStore" class="rounded-md border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-medium text-amber-900">
@@ -216,13 +234,46 @@ const formatBytes = (bytes) => {
 
             <section v-if="showConnectForm" class="panel max-w-2xl">
                 <div class="panel-header">
-                    <h2 class="text-sm font-bold text-zinc-950">Connect store</h2>
+                    <div>
+                        <h2 class="text-sm font-bold text-zinc-950">Development store connection</h2>
+                        <p class="text-sm text-zinc-500">
+                            {{ shopify.public_app_api_key ? 'Public app key is configured. This fallback form is only for development and migration work.' : 'Manual credentials are still being used while we move toward managed Shopify install.' }}
+                        </p>
+                    </div>
                     <button class="btn btn-secondary" type="button" @click="showConnectForm = false">
                         <X class="size-4" />
                         Close
                     </button>
                 </div>
-                <form class="panel-body space-y-4" @submit.prevent="submit">
+                <div class="panel-body space-y-6">
+                    <form class="space-y-4 rounded-lg border border-teal-200 bg-teal-50 p-4" @submit.prevent="connectWithShopify">
+                        <div class="flex items-start gap-3">
+                            <div class="grid size-9 shrink-0 place-items-center rounded-md bg-white text-teal-700 shadow-sm">
+                                <CheckCircle2 class="size-4" />
+                            </div>
+                            <div class="min-w-0">
+                                <h3 class="text-sm font-bold text-zinc-950">Connect through Shopify install</h3>
+                                <p class="mt-1 text-sm text-zinc-600">Best option for today’s testing. Shopify will grant the token and send us back with the store connected.</p>
+                            </div>
+                        </div>
+                        <div>
+                            <label>Shopify store domain</label>
+                            <input v-model="oauthForm.shop" placeholder="your-store.myshopify.com" />
+                            <p class="mt-1 text-xs text-zinc-500">Use the development store or test store where this app is being installed.</p>
+                            <p v-if="oauthForm.errors.shop" class="mt-1 text-xs text-rose-700">{{ oauthForm.errors.shop }}</p>
+                        </div>
+                        <button class="btn btn-primary w-full" :disabled="oauthForm.processing">
+                            Connect with Shopify OAuth
+                        </button>
+                    </form>
+
+                    <div class="flex items-center gap-3 text-xs font-semibold uppercase tracking-wide text-zinc-400">
+                        <span class="h-px flex-1 bg-zinc-200" />
+                        Manual fallback
+                        <span class="h-px flex-1 bg-zinc-200" />
+                    </div>
+
+                    <form class="space-y-4" @submit.prevent="submit">
                     <div>
                         <label>Store name</label>
                         <input v-model="form.name" />
@@ -266,7 +317,8 @@ const formatBytes = (bytes) => {
                         <input v-model="form.brand_tone" />
                     </div>
                     <button class="btn btn-primary w-full" :disabled="form.processing">Connect store</button>
-                </form>
+                    </form>
+                </div>
             </section>
 
             <section class="panel">
@@ -305,7 +357,7 @@ const formatBytes = (bytes) => {
                                 </td>
                                 <td>{{ store.blogs_count }}</td>
                                 <td>
-                                    <div class="min-w-56">
+                                    <div>
                                         <div class="mb-1 flex items-center justify-between gap-2 text-xs">
                                             <span :class="store.latest_sync_log?.status === 'failed' ? 'text-rose-700' : 'text-zinc-500'">{{ syncLabel(store) }}</span>
                                             <span class="font-semibold text-zinc-700">{{ syncProgress(store) }}%</span>

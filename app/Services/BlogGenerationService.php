@@ -18,11 +18,13 @@ class BlogGenerationService
         private readonly SEOScoringService $seo,
         private readonly UsageTrackingService $usage,
         private readonly CreditService $credits,
+        private readonly PlanLimitService $planLimits,
     ) {}
 
     public function generateFromTopic(BlogTopic $topic, ?User $user = null): Blog
     {
         $topic->loadMissing('store');
+        $this->planLimits->ensureWithinLimit($topic->account_id, 'blogs');
         $prompt = $this->prompt($topic);
 
         $blog = Blog::query()->create([

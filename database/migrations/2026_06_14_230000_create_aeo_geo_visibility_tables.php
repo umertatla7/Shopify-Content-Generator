@@ -37,8 +37,8 @@ return new class extends Migration
             $table->text('error_message')->nullable();
             $table->timestamps();
 
-            $table->index(['account_id', 'shopify_store_id', 'created_at']);
-            $table->index(['account_id', 'status']);
+            $table->index(['account_id', 'shopify_store_id', 'created_at'], 'aeo_geo_reports_store_created_idx');
+            $table->index(['account_id', 'status'], 'aeo_geo_reports_status_idx');
         });
 
         Schema::create('aeo_geo_prompt_checks', function (Blueprint $table): void {
@@ -59,8 +59,8 @@ return new class extends Migration
             $table->json('metadata')->nullable();
             $table->timestamps();
 
-            $table->index(['account_id', 'status']);
-            $table->index(['shopify_store_id', 'status']);
+            $table->index(['account_id', 'status'], 'aeo_geo_prompt_status_idx');
+            $table->index(['shopify_store_id', 'status'], 'aeo_geo_prompt_store_status_idx');
         });
     }
 

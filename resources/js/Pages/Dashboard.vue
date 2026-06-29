@@ -6,6 +6,7 @@ import { Coins, FileText, Lightbulb, Send, ShoppingBag, Sparkles, TriangleAlert 
 const props = defineProps({
     stats: Object,
     credits: Object,
+    billing: Object,
     stores: Array,
     blogs: Array,
     latestAnalysis: Object,
@@ -48,6 +49,24 @@ const metricCards = [
                             :style="{ width: `${props.credits.monthly_allowance ? Math.min(100, (props.credits.used / props.credits.monthly_allowance) * 100) : 0}%` }"
                         />
                     </div>
+                </div>
+            </div>
+        </section>
+
+        <section class="panel mb-6">
+            <div class="grid gap-4 p-4 lg:grid-cols-[1fr_auto] lg:items-center">
+                <div>
+                    <div class="text-sm font-semibold text-zinc-950">Public app rollout track</div>
+                    <p class="mt-1 text-sm text-zinc-600">
+                        Billing now has a Shopify-facing setup path. Next we’ll keep tightening install, OAuth, and embedded admin behavior for App Store review.
+                    </p>
+                </div>
+                <div class="flex flex-wrap gap-2">
+                    <span class="badge bg-zinc-100 text-zinc-800">Plan: {{ props.billing.plan_key }}</span>
+                    <span class="badge" :class="props.billing.has_connected_store ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'">
+                        {{ props.billing.has_connected_store ? 'Store connected' : 'Store needed for paid billing' }}
+                    </span>
+                    <Link href="/billing" class="btn btn-secondary">Open billing</Link>
                 </div>
             </div>
         </section>

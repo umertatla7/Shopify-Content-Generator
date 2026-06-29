@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\Product;
+use App\Services\PlanLimitService;
 use App\Services\ProductContentService;
 use App\Services\Shopify\ShopifyService;
 use Illuminate\Http\JsonResponse;
@@ -12,7 +13,7 @@ use Throwable;
 
 class ProductContentController extends Controller
 {
-    public function generate(Request $request, Product $product, ProductContentService $content): JsonResponse
+    public function generate(Request $request, Product $product, ProductContentService $content, PlanLimitService $planLimits): JsonResponse
     {
         $this->authorizeProduct($request, $product);
 
@@ -23,6 +24,7 @@ class ProductContentController extends Controller
         ]);
 
         try {
+            $planLimits->ensureWithinLimit($request->user()->currentAccount, 'product_descriptions');
             $product = $content->generate($product, $validated, $request->user());
         } catch (Throwable $exception) {
             return response()->json(['message' => $exception->getMessage()], 422);
@@ -43,6 +45,7 @@ class ProductContentController extends Controller
             'generated_description' => ['required', 'string', 'max:20000'],
             'generated_seo_title' => ['nullable', 'string', 'max:255'],
             'generated_seo_description' => ['nullable', 'string', 'max:500'],
+            'publish' => ['sometimes', 'boolean'],
         ]);
 
         $product->update([
@@ -56,6 +59,7 @@ class ProductContentController extends Controller
                 'description_html' => $validated['generated_description'],
                 'seo_title' => $validated['generated_seo_title'] ?? null,
                 'seo_description' => $validated['generated_seo_description'] ?? null,
+                'publish' => (bool) ($validated['publish'] ?? false),
             ]);
 
             $product->update([
@@ -84,7 +88,9 @@ class ProductContentController extends Controller
         }
 
         return response()->json([
-            'message' => 'Product pushed to Shopify.',
+            'message' => ($validated['publish'] ?? false)
+                ? 'Product pushed and published on Shopify.'
+                : 'Product content pushed to Shopify.',
             'product' => $this->payload($product->refresh()),
         ]);
     }

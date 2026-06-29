@@ -1,5 +1,5 @@
 <script setup>
-import { reactive } from 'vue';
+import { reactive, ref } from 'vue';
 import { Head, router, useForm } from '@inertiajs/vue3';
 import AppLayout from '@/Layouts/AppLayout.vue';
 
@@ -7,22 +7,32 @@ const props = defineProps({
     plans: Array,
 });
 
+const defaultFeatures = ['product_descriptions'];
+const defaultFeatureText = defaultFeatures.join('\n');
+
 const newForm = useForm({
     key: '',
     name: '',
     monthly_price: 0,
-    monthly_blog_limit: 40,
-    monthly_ai_token_limit: 500000,
-    monthly_credit_allowance: 1000,
-    word_limit_estimate: 10000,
+    monthly_blog_limit: 1,
+    monthly_ai_token_limit: 150000,
+    monthly_credit_allowance: 500,
+    word_limit_estimate: 5000,
     store_limit: 1,
     user_limit: 1,
-    product_description_limit: 70,
-    collection_description_limit: 10,
-    credit_expires_after_days: '',
-    features: ['phase_1_blog_manager'],
+    product_description_limit: 25,
+    collection_description_limit: 0,
+    monthly_seo_report_limit: 1,
+    monthly_ai_visibility_report_limit: 1,
+    monthly_image_optimization_limit: 0,
+    monthly_image_alt_text_limit: 0,
+    tracked_keyword_limit: 10,
+    credit_expires_after_days: 30,
+    shopify_billing_plan_handle: '',
+    features: [...defaultFeatures],
     is_active: true,
 });
+const newFeaturesText = ref(defaultFeatureText);
 
 const planForms = reactive(Object.fromEntries(props.plans.map((plan) => [
     plan.id,
@@ -32,18 +42,48 @@ const planForms = reactive(Object.fromEntries(props.plans.map((plan) => [
     },
 ])));
 
+const normalizeFeatures = (value) => String(value || '')
+    .split('\n')
+    .map((item) => item.trim())
+    .filter(Boolean);
+
+const resetNewForm = () => {
+    newForm.reset();
+    Object.assign(newForm, {
+        monthly_price: 0,
+        monthly_blog_limit: 1,
+        monthly_ai_token_limit: 150000,
+        monthly_credit_allowance: 500,
+        word_limit_estimate: 5000,
+        store_limit: 1,
+        user_limit: 1,
+        product_description_limit: 25,
+        collection_description_limit: 0,
+        monthly_seo_report_limit: 1,
+        monthly_ai_visibility_report_limit: 1,
+        monthly_image_optimization_limit: 0,
+        monthly_image_alt_text_limit: 0,
+        tracked_keyword_limit: 10,
+        credit_expires_after_days: 30,
+        shopify_billing_plan_handle: '',
+        features: [...defaultFeatures],
+        is_active: true,
+    });
+    newFeaturesText.value = defaultFeatureText;
+};
+
 const submitNew = () => {
-    newForm.features = Array.isArray(newForm.features)
-        ? newForm.features
-        : String(newForm.features || '').split('\n').map((item) => item.trim()).filter(Boolean);
+    newForm.features = normalizeFeatures(newFeaturesText.value);
+
     newForm.post('/admin/plans', {
         preserveScroll: true,
-        onSuccess: () => newForm.reset(),
+        onSuccess: () => resetNewForm(),
     });
 };
 
 const savePlan = (plan) => {
     const form = planForms[plan.id];
+
     router.patch(`/admin/plans/${plan.id}`, {
         key: form.key,
         name: form.name,
@@ -56,11 +96,23 @@ const savePlan = (plan) => {
         user_limit: form.user_limit,
         product_description_limit: form.product_description_limit,
         collection_description_limit: form.collection_description_limit,
+        monthly_seo_report_limit: form.monthly_seo_report_limit,
+        monthly_ai_visibility_report_limit: form.monthly_ai_visibility_report_limit,
+        monthly_image_optimization_limit: form.monthly_image_optimization_limit,
+        monthly_image_alt_text_limit: form.monthly_image_alt_text_limit,
+        tracked_keyword_limit: form.tracked_keyword_limit,
         credit_expires_after_days: form.credit_expires_after_days,
-        features: String(form.features_text || '').split('\n').map((item) => item.trim()).filter(Boolean),
+        shopify_billing_plan_handle: form.shopify_billing_plan_handle,
+        features: normalizeFeatures(form.features_text),
         is_active: Boolean(form.is_active),
     }, { preserveScroll: true });
 };
+
+const planTone = (key) => ({
+    free: 'border-zinc-200 bg-white',
+    growth: 'border-teal-200 bg-teal-50/40',
+    pro: 'border-indigo-200 bg-indigo-50/40',
+}[key] ?? 'border-zinc-200 bg-white');
 </script>
 
 <template>
@@ -68,9 +120,16 @@ const savePlan = (plan) => {
     <AppLayout>
         <template #title>Plans</template>
 
+        <div class="mb-6">
+            <h2 class="text-2xl font-bold text-zinc-950">Public app plan catalog</h2>
+            <p class="mt-1 max-w-3xl text-sm text-zinc-500">Manage credits, limits, and Shopify billing handles for the public pricing tiers.</p>
+        </div>
+
         <section class="panel mb-6">
-            <div class="panel-header"><h2 class="text-sm font-bold text-zinc-950">Create package</h2></div>
-            <form class="panel-body grid gap-4 md:grid-cols-3 xl:grid-cols-6" @submit.prevent="submitNew">
+            <div class="panel-header">
+                <h2 class="text-sm font-bold text-zinc-950">Create plan</h2>
+            </div>
+            <form class="panel-body grid gap-4 md:grid-cols-2 xl:grid-cols-4" @submit.prevent="submitNew">
                 <div>
                     <label>Key</label>
                     <input v-model="newForm.key" placeholder="growth" />
@@ -84,85 +143,185 @@ const savePlan = (plan) => {
                     <input v-model="newForm.monthly_price" type="number" min="0" step="0.01" />
                 </div>
                 <div>
-                    <label>Store limit</label>
-                    <input v-model="newForm.store_limit" type="number" min="0" />
+                    <label>Billing handle</label>
+                    <input v-model="newForm.shopify_billing_plan_handle" placeholder="growth" />
                 </div>
                 <div>
                     <label>Monthly credits</label>
                     <input v-model="newForm.monthly_credit_allowance" type="number" min="0" />
                 </div>
                 <div>
+                    <label>Blogs / month</label>
+                    <input v-model="newForm.monthly_blog_limit" type="number" min="0" />
+                </div>
+                <div>
+                    <label>Products / month</label>
+                    <input v-model="newForm.product_description_limit" type="number" min="0" />
+                </div>
+                <div>
+                    <label>Collections / month</label>
+                    <input v-model="newForm.collection_description_limit" type="number" min="0" />
+                </div>
+                <div>
+                    <label>SEO reports / month</label>
+                    <input v-model="newForm.monthly_seo_report_limit" type="number" min="0" />
+                </div>
+                <div>
+                    <label>AI visibility / month</label>
+                    <input v-model="newForm.monthly_ai_visibility_report_limit" type="number" min="0" />
+                </div>
+                <div>
+                    <label>Image optimization / month</label>
+                    <input v-model="newForm.monthly_image_optimization_limit" type="number" min="0" />
+                </div>
+                <div>
+                    <label>Image alt text / month</label>
+                    <input v-model="newForm.monthly_image_alt_text_limit" type="number" min="0" />
+                </div>
+                <div>
+                    <label>Tracked keywords</label>
+                    <input v-model="newForm.tracked_keyword_limit" type="number" min="0" />
+                </div>
+                <div>
+                    <label>Store limit</label>
+                    <input v-model="newForm.store_limit" type="number" min="0" />
+                </div>
+                <div>
                     <label>User limit</label>
                     <input v-model="newForm.user_limit" type="number" min="0" />
                 </div>
                 <div>
-                    <label>Blog limit</label>
-                    <input v-model="newForm.monthly_blog_limit" type="number" min="0" />
-                </div>
-                <div>
-                    <label>Word estimate</label>
-                    <input v-model="newForm.word_limit_estimate" type="number" min="0" />
-                </div>
-                <div>
-                    <label>Product desc limit</label>
-                    <input v-model="newForm.product_description_limit" type="number" min="0" />
-                </div>
-                <div>
-                    <label>Collection desc limit</label>
-                    <input v-model="newForm.collection_description_limit" type="number" min="0" />
-                </div>
-                <div>
                     <label>Credit expiry days</label>
-                    <input v-model="newForm.credit_expires_after_days" type="number" min="0" placeholder="Optional" />
+                    <input v-model="newForm.credit_expires_after_days" type="number" min="0" />
                 </div>
-                <div class="flex items-end">
-                    <button class="btn btn-primary w-full" :disabled="newForm.processing">Create</button>
+                <div class="md:col-span-2 xl:col-span-4">
+                    <label>Feature flags</label>
+                    <textarea v-model="newFeaturesText" class="min-h-24" placeholder="One flag per line" />
+                </div>
+                <label class="flex items-center gap-2 text-sm font-medium text-zinc-700">
+                    <input v-model="newForm.is_active" type="checkbox" class="size-4 rounded border-zinc-300 p-0" />
+                    Active
+                </label>
+                <div class="flex items-end justify-end md:col-span-2 xl:col-span-3">
+                    <button class="btn btn-primary min-w-40" :disabled="newForm.processing">Create</button>
                 </div>
             </form>
         </section>
 
-        <section class="panel">
-            <div class="panel-header"><h2 class="text-sm font-bold text-zinc-950">Package definitions</h2></div>
-            <div class="table-wrap">
-                <table class="data-table">
-                    <thead>
-                        <tr>
-                            <th>Plan</th>
-                            <th>Price</th>
-                            <th>Credits</th>
-                            <th>Limits</th>
-                            <th>Blogs</th>
-                            <th>Features</th>
-                            <th>Active</th>
-                            <th>Actions</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        <tr v-for="plan in props.plans" :key="plan.id">
-                            <td class="min-w-60">
-                                <input v-model="planForms[plan.id].name" class="mb-2" />
-                                <input v-model="planForms[plan.id].key" class="font-mono text-xs" />
-                            </td>
-                            <td><input v-model="planForms[plan.id].monthly_price" type="number" min="0" step="0.01" class="w-28" /></td>
-                            <td><input v-model="planForms[plan.id].monthly_credit_allowance" type="number" min="0" class="w-32" /></td>
-                            <td>
-                                <div class="grid min-w-72 grid-cols-2 gap-2">
-                                    <label class="normal-case tracking-normal text-zinc-600">Stores<input v-model="planForms[plan.id].store_limit" type="number" min="0" class="mt-1" /></label>
-                                    <label class="normal-case tracking-normal text-zinc-600">Users<input v-model="planForms[plan.id].user_limit" type="number" min="0" class="mt-1" /></label>
-                                    <label class="normal-case tracking-normal text-zinc-600">Products<input v-model="planForms[plan.id].product_description_limit" type="number" min="0" class="mt-1" /></label>
-                                    <label class="normal-case tracking-normal text-zinc-600">Collections<input v-model="planForms[plan.id].collection_description_limit" type="number" min="0" class="mt-1" /></label>
-                                    <label class="normal-case tracking-normal text-zinc-600">Words<input v-model="planForms[plan.id].word_limit_estimate" type="number" min="0" class="mt-1" /></label>
-                                    <label class="normal-case tracking-normal text-zinc-600">Expiry days<input v-model="planForms[plan.id].credit_expires_after_days" type="number" min="0" class="mt-1" /></label>
-                                </div>
-                            </td>
-                            <td><input v-model="planForms[plan.id].monthly_blog_limit" type="number" min="0" class="w-28" /></td>
-                            <td><textarea v-model="planForms[plan.id].features_text" class="min-h-24 w-64 font-mono text-xs" /></td>
-                            <td><input v-model="planForms[plan.id].is_active" type="checkbox" class="size-4 rounded border-zinc-300 p-0" /></td>
-                            <td><button class="btn btn-primary" type="button" @click="savePlan(plan)">Save</button></td>
-                        </tr>
-                    </tbody>
-                </table>
-            </div>
+        <section class="space-y-6">
+            <article
+                v-for="plan in props.plans"
+                :key="plan.id"
+                class="panel border"
+                :class="planTone(plan.key)"
+            >
+                <div class="panel-header flex flex-wrap items-center justify-between gap-3">
+                    <div>
+                        <h3 class="text-lg font-bold text-zinc-950">{{ planForms[plan.id].name || 'Untitled plan' }}</h3>
+                        <p class="text-sm text-zinc-500">{{ planForms[plan.id].key || 'no-key' }}</p>
+                    </div>
+                    <div class="flex items-center gap-3">
+                        <label class="flex items-center gap-2 text-sm font-medium text-zinc-700">
+                            <input v-model="planForms[plan.id].is_active" type="checkbox" class="size-4 rounded border-zinc-300 p-0" />
+                            Active
+                        </label>
+                        <button class="btn btn-primary" type="button" @click="savePlan(plan)">Save</button>
+                    </div>
+                </div>
+
+                <div class="panel-body space-y-6">
+                    <div class="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+                        <div>
+                            <label>Plan name</label>
+                            <input v-model="planForms[plan.id].name" />
+                        </div>
+                        <div>
+                            <label>Plan key</label>
+                            <input v-model="planForms[plan.id].key" class="font-mono text-xs" />
+                        </div>
+                        <div>
+                            <label>Monthly price</label>
+                            <input v-model="planForms[plan.id].monthly_price" type="number" min="0" step="0.01" />
+                        </div>
+                        <div>
+                            <label>Billing handle</label>
+                            <input v-model="planForms[plan.id].shopify_billing_plan_handle" placeholder="Optional Shopify price handle" />
+                        </div>
+                    </div>
+
+                    <div class="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
+                        <div>
+                            <label>Monthly credits</label>
+                            <input v-model="planForms[plan.id].monthly_credit_allowance" type="number" min="0" />
+                        </div>
+                        <div>
+                            <label>AI token budget</label>
+                            <input v-model="planForms[plan.id].monthly_ai_token_limit" type="number" min="0" />
+                        </div>
+                        <div>
+                            <label>Word estimate</label>
+                            <input v-model="planForms[plan.id].word_limit_estimate" type="number" min="0" />
+                        </div>
+                        <div>
+                            <label>Store limit</label>
+                            <input v-model="planForms[plan.id].store_limit" type="number" min="0" />
+                        </div>
+                        <div>
+                            <label>User limit</label>
+                            <input v-model="planForms[plan.id].user_limit" type="number" min="0" />
+                        </div>
+                    </div>
+
+                    <div>
+                        <h4 class="text-sm font-semibold text-zinc-900">Monthly usage limits</h4>
+                        <div class="mt-3 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+                            <div>
+                                <label>Blogs</label>
+                                <input v-model="planForms[plan.id].monthly_blog_limit" type="number" min="0" />
+                            </div>
+                            <div>
+                                <label>Product descriptions</label>
+                                <input v-model="planForms[plan.id].product_description_limit" type="number" min="0" />
+                            </div>
+                            <div>
+                                <label>Collection descriptions</label>
+                                <input v-model="planForms[plan.id].collection_description_limit" type="number" min="0" />
+                            </div>
+                            <div>
+                                <label>SEO reports</label>
+                                <input v-model="planForms[plan.id].monthly_seo_report_limit" type="number" min="0" />
+                            </div>
+                            <div>
+                                <label>AI visibility reports</label>
+                                <input v-model="planForms[plan.id].monthly_ai_visibility_report_limit" type="number" min="0" />
+                            </div>
+                            <div>
+                                <label>Image optimization</label>
+                                <input v-model="planForms[plan.id].monthly_image_optimization_limit" type="number" min="0" />
+                            </div>
+                            <div>
+                                <label>Image alt text</label>
+                                <input v-model="planForms[plan.id].monthly_image_alt_text_limit" type="number" min="0" />
+                            </div>
+                            <div>
+                                <label>Tracked keywords</label>
+                                <input v-model="planForms[plan.id].tracked_keyword_limit" type="number" min="0" />
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="grid gap-4 md:grid-cols-2">
+                        <div>
+                            <label>Credit expiry days</label>
+                            <input v-model="planForms[plan.id].credit_expires_after_days" type="number" min="0" />
+                        </div>
+                        <div>
+                            <label>Feature flags</label>
+                            <textarea v-model="planForms[plan.id].features_text" class="min-h-28 font-mono text-xs" />
+                        </div>
+                    </div>
+                </div>
+            </article>
         </section>
     </AppLayout>
 </template>

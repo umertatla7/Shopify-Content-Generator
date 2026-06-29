@@ -43,6 +43,10 @@ class DashboardController extends Controller
                 'shopify_publishes' => $accountId ? PublishingLog::forAccount($accountId)->where('status', 'succeeded')->count() : 0,
             ],
             'credits' => $credits->summary($account),
+            'billing' => [
+                'plan_key' => $account?->plan_key ?? 'free',
+                'has_connected_store' => $accountId ? ShopifyStore::forAccount($accountId)->where('status', 'connected')->exists() : false,
+            ],
             'stores' => $accountId ? ShopifyStore::query()
                 ->forAccount($accountId)
                 ->withCount(['products', 'collections', 'blogs', 'analyses'])
