@@ -26,6 +26,7 @@ use App\Http\Controllers\BlogWorkflowController;
 use App\Http\Controllers\CollectionContentController;
 use App\Http\Controllers\CollectionController;
 use App\Http\Controllers\DashboardController;
+use App\Http\Controllers\OnboardingController;
 use App\Http\Controllers\ProductContentController;
 use App\Http\Controllers\ProductController;
 use App\Http\Controllers\SearchConsoleController;
@@ -49,9 +50,12 @@ Route::middleware('guest')->group(function (): void {
 });
 
 Route::get('/shopify/app', [ShopifyInstallController::class, 'app'])->name('shopify.app');
+Route::get('/shopify/install/start', [ShopifyInstallController::class, 'start'])->name('shopify.install.start');
+Route::get('/shopify/oauth/callback', [ShopifyInstallController::class, 'callback'])->name('shopify.oauth.callback');
 
 Route::middleware('auth')->group(function (): void {
     Route::get('/dashboard', DashboardController::class)->name('dashboard');
+    Route::get('/onboarding', OnboardingController::class)->name('onboarding');
     Route::delete('/logout', [AuthenticatedSessionController::class, 'destroy'])->name('logout');
 
     Route::prefix('admin')->name('admin.')->group(function (): void {
@@ -79,8 +83,7 @@ Route::middleware('auth')->group(function (): void {
     });
 
     Route::get('/stores', [ShopifyStoreController::class, 'index'])->name('stores.index');
-    Route::get('/shopify/install/start', [ShopifyInstallController::class, 'start'])->name('shopify.install.start');
-    Route::get('/shopify/oauth/callback', [ShopifyInstallController::class, 'callback'])->name('shopify.oauth.callback');
+    Route::get('/store-audit', [ShopifyStoreController::class, 'index'])->name('store-audit.index');
     Route::post('/stores', [ShopifyStoreController::class, 'store'])->name('stores.store')->middleware('throttle:10,1');
     Route::post('/stores/{store}/sync', [ShopifyStoreController::class, 'sync'])->name('stores.sync');
     Route::post('/stores/{store}/analysis', [StoreAnalysisController::class, 'store'])->name('stores.analysis.store');

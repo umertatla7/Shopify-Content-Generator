@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
 use App\Models\Plan;
+use App\Support\PlanFeatureGate;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
@@ -21,6 +22,7 @@ class AdminPlanController extends Controller
                 ->orderByRaw("case `key` when 'free' then 1 when 'growth' then 2 when 'pro' then 3 else 99 end")
                 ->orderBy('id')
                 ->get(),
+            'featureOptions' => PlanFeatureGate::featureOptions(),
         ]);
     }
 
@@ -50,6 +52,7 @@ class AdminPlanController extends Controller
             'key' => ['required', 'string', 'max:64', Rule::unique('plans', 'key')->ignore($plan?->id)],
             'name' => ['required', 'string', 'max:255'],
             'monthly_price' => ['required', 'numeric', 'min:0', 'max:1000000'],
+            'trial_days' => ['required', 'integer', 'min:0', 'max:365'],
             'monthly_blog_limit' => ['nullable', 'integer', 'min:0', 'max:1000000'],
             'monthly_ai_token_limit' => ['nullable', 'integer', 'min:0', 'max:100000000'],
             'monthly_credit_allowance' => ['required', 'integer', 'min:0', 'max:10000000'],

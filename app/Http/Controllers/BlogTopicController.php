@@ -2,7 +2,6 @@
 
 namespace App\Http\Controllers;
 
-use App\Jobs\GenerateBlogJob;
 use App\Jobs\GenerateBlogTopicsJob;
 use App\Models\AIGeneration;
 use App\Models\BlogTopic;
@@ -205,7 +204,9 @@ class BlogTopicController extends Controller
         ]);
 
         if ($request->boolean('generate_blog')) {
-            GenerateBlogJob::dispatch($topic->id, $request->user()->id);
+            app(BlogGenerationService::class)->generateFromTopic($topic->fresh(), $request->user());
+
+            return back()->with('status', 'Topic approved and blog draft generated.');
         }
 
         return back()->with('status', 'Topic approved.');
@@ -232,15 +233,9 @@ class BlogTopicController extends Controller
             ]);
         }
 
-        if (app()->environment('local') || config('queue.default') === 'sync') {
-            app(BlogGenerationService::class)->generateFromTopic($topic, $request->user());
+        app(BlogGenerationService::class)->generateFromTopic($topic, $request->user());
 
-            return back()->with('status', 'Blog draft generated.');
-        }
-
-        GenerateBlogJob::dispatch($topic->id, $request->user()->id);
-
-        return back()->with('status', 'Blog generation queued.');
+        return back()->with('status', 'Blog draft generated.');
     }
 
     public function generateSelectedBlogs(Request $request): RedirectResponse
@@ -266,15 +261,9 @@ class BlogTopicController extends Controller
                 ]);
             }
 
-            if (app()->environment('local') || config('queue.default') === 'sync') {
-                app(BlogGenerationService::class)->generateFromTopic($topic, $request->user());
-            } else {
-                GenerateBlogJob::dispatch($topic->id, $request->user()->id);
-            }
+            app(BlogGenerationService::class)->generateFromTopic($topic, $request->user());
         }
 
-        return back()->with('status', app()->environment('local') || config('queue.default') === 'sync'
-            ? 'Selected blog drafts generated.'
-            : 'Selected blog drafts queued.');
+        return back()->with('status', 'Selected blog drafts generated.');
     }
 }

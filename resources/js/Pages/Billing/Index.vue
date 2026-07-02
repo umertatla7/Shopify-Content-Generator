@@ -14,14 +14,16 @@ const props = defineProps({
 
 const page = usePage();
 const isEmbedded = computed(() => Boolean(page.props.shopify?.embedded));
-const currentSubscriptionStatus = computed(() => props.currentSubscription?.status ?? 'free');
+const visiblePlans = computed(() => props.plans.filter((plan) => Number(plan.monthly_price) > 0));
+const currentSubscriptionStatus = computed(() => props.currentSubscription?.status ?? 'trial_available');
 const currentPlan = computed(() => props.plans.find((plan) => plan.key === props.currentPlanKey) ?? props.plans[0] ?? null);
-const canCancel = computed(() => ['active', 'trialing', 'pending'].includes(currentSubscriptionStatus.value) && props.currentPlanKey !== 'free');
+const canCancel = computed(() => ['active', 'trialing', 'pending'].includes(currentSubscriptionStatus.value) && Number(props.currentSubscription?.amount ?? 0) > 0);
 
 const formatPrice = (plan) => {
-    if (!plan || Number(plan.monthly_price) <= 0) return 'Free';
+    if (!plan || Number(plan.monthly_price) <= 0) return 'Trial setup';
     return `$${Number(plan.monthly_price).toFixed(2)}/month`;
 };
+const trialLabel = (plan) => Number(plan?.trial_days || 0) > 0 ? `${Number(plan.trial_days)}-day trial` : null;
 
 const limitLabel = (value, unlimitedLabel = 'Unlimited') => {
     if (value === null || value === undefined) return unlimitedLabel;
@@ -32,7 +34,7 @@ const limitLabel = (value, unlimitedLabel = 'Unlimited') => {
 const subscribe = (plan) => router.post(`/billing/plans/${plan.id}/subscribe`, {}, { preserveScroll: true });
 const syncBilling = () => router.post('/billing/sync', {}, { preserveScroll: true });
 const cancelSubscription = () => {
-    if (confirm('Cancel the current Shopify subscription and move this account back to Free?')) {
+    if (confirm('Cancel the current Shopify subscription?')) {
         router.post('/billing/cancel', {}, { preserveScroll: true });
     }
 };
@@ -54,7 +56,7 @@ const cancelSubscription = () => {
                             <div>
                                 <h2 class="text-lg font-bold text-zinc-950">Public-app billing foundation</h2>
                                 <p class="mt-1 text-sm text-zinc-600">
-                                    This account is now wired for Shopify-managed subscription approval, so plan changes can move through Shopify billing instead of manual back-office changes.
+                                    This account is wired for Shopify-managed subscription approval, so plan changes and free-trial starts can move through Shopify billing instead of manual back-office changes.
                                 </p>
                             </div>
                         </div>
@@ -135,7 +137,7 @@ const cancelSubscription = () => {
             </section>
 
             <div v-if="!props.billingReadiness.has_connected_store" class="rounded-md border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
-                Billing can be configured now, but approving a paid plan needs one validated Shopify store connection first.
+                Billing can be configured now, but starting a package trial needs one validated Shopify store connection first.
             </div>
 
             <div v-if="props.billingReadiness.manual_connection_mode" class="rounded-md border border-sky-200 bg-sky-50 px-4 py-3 text-sm text-sky-900">
@@ -144,7 +146,7 @@ const cancelSubscription = () => {
 
             <section class="grid gap-4 xl:grid-cols-3">
                 <article
-                    v-for="plan in props.plans"
+                    v-for="plan in visiblePlans"
                     :key="plan.id"
                     class="panel overflow-hidden"
                     :class="plan.key === props.currentPlanKey ? 'ring-2 ring-teal-200' : ''"
@@ -198,11 +200,15 @@ const cancelSubscription = () => {
                             </div>
                         </div>
 
+                        <div v-if="trialLabel(plan)" class="rounded-md bg-teal-50 px-3 py-2 text-xs font-semibold text-teal-800">
+                            Includes {{ trialLabel(plan) }}
+                        </div>
+
                         <div class="rounded-md bg-zinc-50 p-3 text-sm text-zinc-600">
                             <div class="flex items-start gap-2">
                                 <CheckCircle2 class="mt-0.5 size-4 shrink-0 text-teal-700" />
                                 <span>
-                                    {{ plan.key === 'free' ? 'Best for install friction reduction and first-value onboarding.' : 'Uses Shopify approval flow so merchants see charges inside Shopify billing.' }}
+                                    Uses Shopify approval flow so merchants can start the trial and manage charges inside Shopify billing.
                                 </span>
                             </div>
                         </div>
@@ -215,7 +221,7 @@ const cancelSubscription = () => {
                             @click="subscribe(plan)"
                         >
                             <Store class="size-4" />
-                            {{ plan.key === props.currentPlanKey ? 'Current plan' : (plan.monthly_price > 0 ? 'Choose plan in Shopify' : 'Move to Free') }}
+                            {{ plan.key === props.currentPlanKey ? 'Current plan' : 'Start trial in Shopify' }}
                         </button>
                     </div>
                 </article>

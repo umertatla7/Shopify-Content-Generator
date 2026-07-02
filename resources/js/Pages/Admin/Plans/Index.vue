@@ -5,6 +5,7 @@ import AppLayout from '@/Layouts/AppLayout.vue';
 
 const props = defineProps({
     plans: Array,
+    featureOptions: Array,
 });
 
 const defaultFeatures = ['product_descriptions'];
@@ -14,6 +15,7 @@ const newForm = useForm({
     key: '',
     name: '',
     monthly_price: 0,
+    trial_days: 14,
     monthly_blog_limit: 1,
     monthly_ai_token_limit: 150000,
     monthly_credit_allowance: 500,
@@ -51,6 +53,7 @@ const resetNewForm = () => {
     newForm.reset();
     Object.assign(newForm, {
         monthly_price: 0,
+        trial_days: 14,
         monthly_blog_limit: 1,
         monthly_ai_token_limit: 150000,
         monthly_credit_allowance: 500,
@@ -73,7 +76,10 @@ const resetNewForm = () => {
 };
 
 const submitNew = () => {
-    newForm.features = normalizeFeatures(newFeaturesText.value);
+    newForm.features = Array.from(new Set([
+        ...newForm.features,
+        ...normalizeFeatures(newFeaturesText.value),
+    ]));
 
     newForm.post('/admin/plans', {
         preserveScroll: true,
@@ -88,6 +94,7 @@ const savePlan = (plan) => {
         key: form.key,
         name: form.name,
         monthly_price: form.monthly_price,
+        trial_days: form.trial_days,
         monthly_blog_limit: form.monthly_blog_limit,
         monthly_ai_token_limit: form.monthly_ai_token_limit,
         monthly_credit_allowance: form.monthly_credit_allowance,
@@ -143,6 +150,10 @@ const planTone = (key) => ({
                     <input v-model="newForm.monthly_price" type="number" min="0" step="0.01" />
                 </div>
                 <div>
+                    <label>Trial days</label>
+                    <input v-model="newForm.trial_days" type="number" min="0" />
+                </div>
+                <div>
                     <label>Billing handle</label>
                     <input v-model="newForm.shopify_billing_plan_handle" placeholder="growth" />
                 </div>
@@ -195,8 +206,28 @@ const planTone = (key) => ({
                     <input v-model="newForm.credit_expires_after_days" type="number" min="0" />
                 </div>
                 <div class="md:col-span-2 xl:col-span-4">
-                    <label>Feature flags</label>
-                    <textarea v-model="newFeaturesText" class="min-h-24" placeholder="One flag per line" />
+                    <label>Feature access</label>
+                    <div class="mt-2 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+                        <label
+                            v-for="feature in props.featureOptions"
+                            :key="feature.key"
+                            class="rounded-md border border-zinc-200 bg-white p-3 text-sm"
+                        >
+                            <div class="flex items-start gap-3">
+                                <input
+                                    v-model="newForm.features"
+                                    :value="feature.key"
+                                    type="checkbox"
+                                    class="mt-1 size-4 rounded border-zinc-300 p-0"
+                                />
+                                <div>
+                                    <div class="font-semibold text-zinc-950">{{ feature.label }}</div>
+                                    <div class="mt-1 text-xs text-zinc-500">{{ feature.description }}</div>
+                                </div>
+                            </div>
+                        </label>
+                    </div>
+                    <textarea v-model="newFeaturesText" class="mt-3 min-h-20 font-mono text-xs" placeholder="Optional raw flags, one per line" />
                 </div>
                 <label class="flex items-center gap-2 text-sm font-medium text-zinc-700">
                     <input v-model="newForm.is_active" type="checkbox" class="size-4 rounded border-zinc-300 p-0" />
@@ -242,6 +273,10 @@ const planTone = (key) => ({
                         <div>
                             <label>Monthly price</label>
                             <input v-model="planForms[plan.id].monthly_price" type="number" min="0" step="0.01" />
+                        </div>
+                        <div>
+                            <label>Trial days</label>
+                            <input v-model="planForms[plan.id].trial_days" type="number" min="0" />
                         </div>
                         <div>
                             <label>Billing handle</label>
@@ -316,8 +351,32 @@ const planTone = (key) => ({
                             <input v-model="planForms[plan.id].credit_expires_after_days" type="number" min="0" />
                         </div>
                         <div>
-                            <label>Feature flags</label>
-                            <textarea v-model="planForms[plan.id].features_text" class="min-h-28 font-mono text-xs" />
+                            <label>Feature access</label>
+                            <div class="mt-2 grid gap-3 lg:grid-cols-2">
+                                <label
+                                    v-for="feature in props.featureOptions"
+                                    :key="`${plan.id}-${feature.key}`"
+                                    class="rounded-md border border-zinc-200 bg-white p-3 text-sm"
+                                >
+                                    <div class="flex items-start gap-3">
+                                        <input
+                                            :checked="normalizeFeatures(planForms[plan.id].features_text).includes(feature.key)"
+                                            type="checkbox"
+                                            class="mt-1 size-4 rounded border-zinc-300 p-0"
+                                            @change="(event) => {
+                                                const next = new Set(normalizeFeatures(planForms[plan.id].features_text));
+                                                if (event.target.checked) next.add(feature.key); else next.delete(feature.key);
+                                                planForms[plan.id].features_text = Array.from(next).join('\n');
+                                            }"
+                                        />
+                                        <div>
+                                            <div class="font-semibold text-zinc-950">{{ feature.label }}</div>
+                                            <div class="mt-1 text-xs text-zinc-500">{{ feature.description }}</div>
+                                        </div>
+                                    </div>
+                                </label>
+                            </div>
+                            <textarea v-model="planForms[plan.id].features_text" class="mt-3 min-h-20 font-mono text-xs" />
                         </div>
                     </div>
                 </div>

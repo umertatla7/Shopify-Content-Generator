@@ -2,6 +2,7 @@
 
 namespace App\Http\Middleware;
 
+use App\Support\PlanFeatureGate;
 use App\Support\ShopifyContext;
 use Illuminate\Http\Request;
 use Inertia\Middleware;
@@ -39,6 +40,7 @@ class HandleInertiaRequests extends Middleware
         $user = $request->user();
         $account = $user?->currentAccount;
         $shopifyContext = app(ShopifyContext::class)->props($request);
+        $planAccess = PlanFeatureGate::moduleAccess($account);
 
         return [
             ...parent::share($request),
@@ -56,6 +58,8 @@ class HandleInertiaRequests extends Middleware
                     'name' => $account->name,
                     'slug' => $account->slug,
                     'plan_key' => $account->plan_key,
+                    'plan_features' => PlanFeatureGate::features($account),
+                    'plan_access' => $planAccess,
                 ] : null,
                 'permissions' => $user ? [
                     'stores.view' => $user->hasAccountPermission('stores.view'),
@@ -69,6 +73,7 @@ class HandleInertiaRequests extends Middleware
                     'billing.manage' => $user->hasAccountPermission('billing.manage'),
                     'team.manage' => $user->hasAccountPermission('team.manage'),
                 ] : [],
+                'plan_access' => $planAccess,
             ],
             'shopify' => $shopifyContext,
             'flash' => [

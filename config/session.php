@@ -169,7 +169,7 @@ return [
     |
     */
 
-    'secure' => env('SESSION_SECURE_COOKIE'),
+    'secure' => env('SESSION_SECURE_COOKIE', Str::startsWith((string) env('APP_URL', ''), 'https://')),
 
     /*
     |--------------------------------------------------------------------------
@@ -199,7 +199,7 @@ return [
     |
     */
 
-    'same_site' => env('SESSION_SAME_SITE', 'lax'),
+    'same_site' => env('SESSION_SAME_SITE', env('SHOPIFY_PUBLIC_APP_API_KEY') ? 'none' : 'lax'),
 
     /*
     |--------------------------------------------------------------------------
@@ -212,6 +212,6 @@ return [
     |
     */
 
-    'partitioned' => env('SESSION_PARTITIONED_COOKIE', false),
+    'partitioned' => env('SESSION_PARTITIONED_COOKIE', (bool) env('SHOPIFY_PUBLIC_APP_API_KEY')),
 
 ];

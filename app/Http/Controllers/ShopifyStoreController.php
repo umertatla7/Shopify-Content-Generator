@@ -9,6 +9,7 @@ use App\Models\ShopifyStore;
 use App\Models\ShopifySyncLog;
 use App\Services\Shopify\ShopifyService;
 use App\Services\Shopify\ShopifySyncService;
+use App\Support\PlanFeatureGate;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\ValidationException;
@@ -28,6 +29,11 @@ class ShopifyStoreController extends Controller
 
         $accountId = $request->user()->current_account_id;
         $account = $request->user()->currentAccount;
+
+        if (! PlanFeatureGate::moduleAccess($account)['store_audit']) {
+            return Inertia::render('FeaturePreview', PlanFeatureGate::preview('store_audit'));
+        }
+
         $plan = $account ? Plan::query()->where('key', $account->plan_key)->first() : null;
         $storeLimit = (int) ($plan?->store_limit ?? 1);
         $storeCount = ShopifyStore::forAccount($accountId)->count();

@@ -74,7 +74,7 @@ class BillingController extends Controller
 
         try {
             $returnUrl = $shopifyContext->decorate(route('billing.confirm', ['plan' => $plan->key]), $request);
-            $payload = $billing->createSubscription($primaryStore, $plan, $returnUrl, 7);
+            $payload = $billing->createSubscription($primaryStore, $plan, $returnUrl, max(0, (int) ($plan->trial_days ?? 14)));
             $remote = $payload['appSubscription'] ?? [];
 
             Subscription::query()->create([

@@ -15,6 +15,7 @@ class Plan extends Model
             'features' => 'array',
             'is_active' => 'boolean',
             'monthly_price' => 'decimal:2',
+            'trial_days' => 'integer',
         ];
     }
 

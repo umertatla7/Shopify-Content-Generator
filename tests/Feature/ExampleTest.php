@@ -23,4 +23,24 @@ class ExampleTest extends TestCase
 
         $response->assertOk();
     }
+
+    public function test_shopify_login_context_redirects_back_into_app_entrypoint(): void
+    {
+        config()->set('services.shopify.public_app_api_key', 'shopify_key');
+        config()->set('services.shopify.manual_connection_mode', false);
+
+        $response = $this->get('/login?shop=acme.myshopify.com&host=encoded-host&embedded=1');
+
+        $response->assertRedirect('/shopify/app?shop=acme.myshopify.com&host=encoded-host&embedded=1');
+    }
+
+    public function test_shopify_register_context_redirects_back_into_app_entrypoint(): void
+    {
+        config()->set('services.shopify.public_app_api_key', 'shopify_key');
+        config()->set('services.shopify.manual_connection_mode', false);
+
+        $response = $this->get('/register?shop=acme.myshopify.com&host=encoded-host&embedded=1');
+
+        $response->assertRedirect('/shopify/app?shop=acme.myshopify.com&host=encoded-host&embedded=1');
+    }
 }

@@ -28,6 +28,11 @@ class Account extends Model
         return $this->belongsTo(User::class, 'owner_id');
     }
 
+    public function plan(): BelongsTo
+    {
+        return $this->belongsTo(Plan::class, 'plan_key', 'key');
+    }
+
     public function users(): BelongsToMany
     {
         return $this->belongsToMany(User::class, 'account_users')

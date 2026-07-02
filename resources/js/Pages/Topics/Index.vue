@@ -152,6 +152,7 @@ const visibleTopics = computed(() => {
 
     return waitingTopics.value;
 });
+const isNewBatch = (topic) => Boolean(props.latestGeneration?.id) && Number(topic.ai_generation_id) === Number(props.latestGeneration.id);
 
 const generationStatus = computed(() => {
     if (form.processing) return 'running';
@@ -417,7 +418,10 @@ const generateSelectedBlogs = () => {
                                         />
                                         <span class="font-bold leading-6">{{ topic.title }}</span>
                                     </label>
-                                    <p class="mt-1 text-xs text-zinc-500">{{ topic.store?.name }} · {{ topic.search_intent ?? 'intent pending' }}</p>
+                                    <div class="mt-1 flex flex-wrap items-center gap-2 text-xs text-zinc-500">
+                                        <span>{{ topic.store?.name }} · {{ topic.search_intent ?? 'intent pending' }}</span>
+                                        <span v-if="isNewBatch(topic)" class="badge bg-teal-100 text-teal-800">New batch</span>
+                                    </div>
                                 </div>
                                 <span class="badge shrink-0" :class="`badge-${topic.status}`">{{ topic.status }}</span>
                             </div>

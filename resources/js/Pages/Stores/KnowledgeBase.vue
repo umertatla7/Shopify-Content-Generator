@@ -37,7 +37,7 @@ const jsonList = (value) => {
         <template #title>Store Knowledge Base</template>
 
         <div class="mb-4 flex flex-wrap items-center justify-between gap-3">
-            <Link href="/stores" class="btn btn-secondary"><ArrowLeft class="size-4" />Stores</Link>
+            <Link href="/store-audit" class="btn btn-secondary"><ArrowLeft class="size-4" />Store Audit</Link>
             <button class="btn btn-primary" type="button" @click="generate">
                 <DatabaseZap class="size-4" />
                 Build knowledge base

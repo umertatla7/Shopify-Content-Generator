@@ -2,7 +2,7 @@
 import { computed, ref } from 'vue';
 import { Head, Link, router, useForm, usePage } from '@inertiajs/vue3';
 import AppLayout from '@/Layouts/AppLayout.vue';
-import { AlertTriangle, Brain, CheckCircle2, Gauge, ImageOff, MousePointerClick, Move, Plus, RefreshCw, Server, Timer, Trash2, X } from 'lucide-vue-next';
+import { AlertTriangle, Brain, CheckCircle2, Gauge, ImageOff, MousePointerClick, Move, RefreshCw, Server, Timer, Trash2, X } from 'lucide-vue-next';
 
 const props = defineProps({
     stores: Array,
@@ -15,11 +15,6 @@ const page = usePage();
 const shopify = computed(() => page.props.shopify ?? {});
 
 const showConnectForm = ref(false);
-const openConnectForm = () => {
-    if (props.canAddStore) {
-        showConnectForm.value = true;
-    }
-};
 
 const syncProgress = (store) => {
     const status = store.latest_sync_log?.status;
@@ -209,27 +204,15 @@ const formatBytes = (bytes) => {
 </script>
 
 <template>
-    <Head title="Stores" />
+    <Head title="Store Audit" />
     <AppLayout>
-        <template #title>Shopify Stores</template>
+        <template #title>Store Audit</template>
 
         <div class="space-y-6">
             <div class="flex justify-end">
                 <Link href="/billing" class="btn btn-secondary">
                     View billing
                 </Link>
-                <button class="btn btn-primary" type="button" :disabled="!props.canAddStore" @click="openConnectForm">
-                    <Plus class="size-4" />
-                    Connect new store
-                </button>
-            </div>
-
-            <div class="rounded-md border border-sky-200 bg-sky-50 px-4 py-3 text-sm text-sky-900">
-                For App Store launch, store access will come from Shopify install and OAuth. This manual credential form stays available for local development while we finish the public-app onboarding flow.
-            </div>
-
-            <div v-if="!props.canAddStore" class="rounded-md border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-medium text-amber-900">
-                Your current package allows {{ props.storeLimit }} connected store{{ props.storeLimit === 1 ? '' : 's' }}. Ask admin to upgrade your package before connecting another store.
             </div>
 
             <section v-if="showConnectForm" class="panel max-w-2xl">

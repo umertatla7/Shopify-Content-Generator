@@ -202,7 +202,7 @@ const pushContent = async () => {
                         <RefreshCw class="size-4" />
                         Refresh view
                     </button>
-                    <Link href="/stores" class="btn btn-secondary">Manage stores</Link>
+                    <Link href="/store-audit" class="btn btn-secondary">Open store audit</Link>
                 </div>
             </div>
 

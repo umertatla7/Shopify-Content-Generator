@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\ActivityLog;
 use App\Models\User;
 use App\Services\AccountProvisioningService;
+use App\Services\Shopify\ShopifyService;
 use App\Support\ShopifyContext;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -16,8 +17,12 @@ use Inertia\Response;
 
 class RegisteredUserController extends Controller
 {
-    public function create(): Response
+    public function create(Request $request, ShopifyService $shopify, ShopifyContext $shopifyContext): Response|RedirectResponse
     {
+        if ($redirect = $this->shopifyAppRedirect($request, $shopify, $shopifyContext)) {
+            return $redirect;
+        }
+
         return Inertia::render('Auth/Register');
     }
 
@@ -54,5 +59,27 @@ class RegisteredUserController extends Controller
         $request->session()->regenerate();
 
         return redirect()->to($shopifyContext->decorate(route('dashboard'), $request));
+    }
+
+    private function shopifyAppRedirect(
+        Request $request,
+        ShopifyService $shopify,
+        ShopifyContext $shopifyContext,
+    ): ?RedirectResponse {
+        if ((bool) config('services.shopify.manual_connection_mode', true)) {
+            return null;
+        }
+
+        if (! filled(config('services.shopify.public_app_api_key'))) {
+            return null;
+        }
+
+        $shop = $shopify->normalizeDomain((string) $request->query('shop', ''));
+
+        if ($shop === '' || ! $shopify->isValidShopDomain($shop)) {
+            return null;
+        }
+
+        return redirect()->to($shopifyContext->decorate(route('shopify.app', ['shop' => $shop]), $request));
     }
 }

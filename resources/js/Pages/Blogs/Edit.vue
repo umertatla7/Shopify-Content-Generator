@@ -113,6 +113,8 @@ const blogStatus = ref(props.blog.status ?? 'draft');
 const bodyBusy = computed(() => bodyGenerating.value || bodyTyping.value);
 const publishableStatuses = ['approved', 'scheduled', 'published'];
 const canSendToShopify = computed(() => publishableStatuses.includes(blogStatus.value));
+const hasPublishableBody = computed(() => plainBodyText.value.length > 0);
+const canPublishToShopify = computed(() => canSendToShopify.value && hasPublishableBody.value && !form.processing);
 const publishButtonLabel = computed(() => blogStatus.value === 'published' ? 'Update Shopify' : 'Publish');
 const plainBodyText = computed(() => (form.body || '').replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim());
 const bodyWordCount = computed(() => plainBodyText.value ? plainBodyText.value.split(' ').filter(Boolean).length : 0);
@@ -351,8 +353,10 @@ const createImageBrief = () => router.post(`/blogs/${props.blog.id}/image`, {}, 
                 </button>
                 <button
                     class="btn btn-primary"
-                    :disabled="!canSendToShopify"
-                    :title="canSendToShopify ? 'Send saved content to Shopify' : 'Approve the blog before publishing'"
+                    :disabled="!canPublishToShopify"
+                    :title="!canSendToShopify
+                        ? 'Approve the blog before publishing'
+                        : (!hasPublishableBody ? 'Generate and save the full blog body before publishing' : 'Send saved content to Shopify')"
                     @click="publish"
                 >
                     <Send class="size-4" />{{ publishButtonLabel }}
@@ -497,6 +501,9 @@ const createImageBrief = () => router.post(`/blogs/${props.blog.id}/image`, {}, 
                         </div>
                         <div v-if="!form.body" class="mb-4 rounded-md border border-dashed border-zinc-300 bg-zinc-50 p-4 text-sm text-zinc-600">
                             This draft has SEO metadata but no full article body yet. Click <span class="font-semibold text-zinc-950">Generate full body</span> to write the complete blog content.
+                        </div>
+                        <div v-else-if="!hasPublishableBody" class="mb-4 rounded-md border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
+                            The article body is still empty after formatting cleanup. Add body content before sending this blog to Shopify.
                         </div>
                         <div
                             ref="editor"

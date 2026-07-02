@@ -49,7 +49,10 @@ class ProductContentController extends Controller
         ]);
 
         $product->update([
-            ...$validated,
+            'generated_title' => $validated['generated_title'],
+            'generated_description' => $validated['generated_description'],
+            'generated_seo_title' => $validated['generated_seo_title'] ?? null,
+            'generated_seo_description' => $validated['generated_seo_description'] ?? null,
             'shopify_content_push_error' => null,
         ]);
 

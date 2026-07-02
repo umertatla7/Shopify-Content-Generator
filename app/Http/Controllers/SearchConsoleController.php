@@ -12,6 +12,7 @@ use App\Models\TrackedKeyword;
 use App\Services\Google\SearchConsoleService;
 use App\Services\PlanLimitService;
 use App\Services\SystemSettingService;
+use App\Support\PlanFeatureGate;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
@@ -32,6 +33,10 @@ class SearchConsoleController extends Controller
 
         $account = $this->account($request);
         $this->authorizeRankTracking($request);
+
+        if (! PlanFeatureGate::moduleAccess($account)['rank_tracking']) {
+            return Inertia::render('FeaturePreview', PlanFeatureGate::preview('rank_tracking'));
+        }
 
         $properties = SearchConsoleProperty::query()
             ->forAccount($account)

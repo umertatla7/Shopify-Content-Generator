@@ -9,6 +9,7 @@ use App\Models\ShopifyStore;
 use App\Services\AeoGeoVisibilityService;
 use App\Services\PlanLimitService;
 use App\Services\UsageTrackingService;
+use App\Support\PlanFeatureGate;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
@@ -25,6 +26,10 @@ class AeoGeoVisibilityController extends Controller
 
         $this->authorizeVisibility($request);
         $account = $request->user()->currentAccount;
+
+        if (! PlanFeatureGate::moduleAccess($account)['ai_visibility']) {
+            return Inertia::render('FeaturePreview', PlanFeatureGate::preview('ai_visibility'));
+        }
 
         $stores = ShopifyStore::query()
             ->forAccount($account)
