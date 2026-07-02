@@ -25,6 +25,8 @@ class BlogTopicService
      */
     public function generate(ShopifyStore $store, array $options, ?User $user = null)
     {
+        @set_time_limit((int) config('services.openai.long_task_timeout', 180));
+
         $count = max(1, min(25, (int) ($options['count'] ?? 5)));
         $analysis = StoreAnalysis::query()
             ->where('shopify_store_id', $store->id)

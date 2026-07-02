@@ -30,25 +30,25 @@ class ShopifyStoreController extends Controller
         $accountId = $request->user()->current_account_id;
         $account = $request->user()->currentAccount;
 
+        return Inertia::render('Stores/Index', $this->storesPayload($accountId, $account, 'manage'));
+    }
+
+    public function audit(Request $request): Response|RedirectResponse
+    {
+        if ($request->user()->isPlatformAdmin()) {
+            return redirect()->route('admin.stores.index');
+        }
+
+        $this->authorize('viewAny', ShopifyStore::class);
+
+        $accountId = $request->user()->current_account_id;
+        $account = $request->user()->currentAccount;
+
         if (! PlanFeatureGate::moduleAccess($account)['store_audit']) {
             return Inertia::render('FeaturePreview', PlanFeatureGate::preview('store_audit'));
         }
 
-        $plan = $account ? Plan::query()->where('key', $account->plan_key)->first() : null;
-        $storeLimit = (int) ($plan?->store_limit ?? 1);
-        $storeCount = ShopifyStore::forAccount($accountId)->count();
-
-        return Inertia::render('Stores/Index', [
-            'storeLimit' => $storeLimit,
-            'storeCount' => $storeCount,
-            'canAddStore' => $storeCount < $storeLimit,
-            'stores' => ShopifyStore::query()
-                ->forAccount($accountId)
-                ->with(['latestSyncLog', 'knowledgeBase', 'latestAnalysis'])
-                ->withCount(['products', 'collections', 'pages', 'blogs'])
-                ->latest()
-                ->get(),
-        ]);
+        return Inertia::render('Stores/Index', $this->storesPayload($accountId, $account, 'audit'));
     }
 
     public function store(Request $request, ShopifyService $shopify): RedirectResponse
@@ -186,5 +186,25 @@ class ShopifyStoreController extends Controller
         $store->delete();
 
         return back()->with('status', 'Store removed.');
+    }
+
+    private function storesPayload(int|string|null $accountId, mixed $account, string $mode): array
+    {
+        $plan = $account ? Plan::query()->where('key', $account->plan_key)->first() : null;
+        $storeLimit = (int) ($plan?->store_limit ?? 1);
+        $storeCount = ShopifyStore::forAccount($accountId)->count();
+
+        return [
+            'mode' => $mode,
+            'storeLimit' => $storeLimit,
+            'storeCount' => $storeCount,
+            'canAddStore' => $storeCount < $storeLimit,
+            'stores' => ShopifyStore::query()
+                ->forAccount($accountId)
+                ->with(['latestSyncLog', 'knowledgeBase', 'latestAnalysis'])
+                ->withCount(['products', 'collections', 'pages', 'blogs'])
+                ->latest()
+                ->get(),
+        ];
     }
 }

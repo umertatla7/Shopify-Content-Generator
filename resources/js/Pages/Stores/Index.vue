@@ -9,10 +9,19 @@ const props = defineProps({
     storeLimit: Number,
     storeCount: Number,
     canAddStore: Boolean,
+    mode: {
+        type: String,
+        default: 'manage',
+    },
 });
 
 const page = usePage();
 const shopify = computed(() => page.props.shopify ?? {});
+const isAuditMode = computed(() => props.mode === 'audit');
+const pageTitle = computed(() => isAuditMode.value ? 'Store Audit' : 'Store');
+const pageDescription = computed(() => isAuditMode.value
+    ? 'Review store audit reports, performance, SEO findings, and content gaps for the connected store.'
+    : 'Manage the connected Shopify store, run syncs, and keep catalog data up to date before using the SEO tools.');
 
 const showConnectForm = ref(false);
 
@@ -204,15 +213,30 @@ const formatBytes = (bytes) => {
 </script>
 
 <template>
-    <Head title="Store Audit" />
+    <Head :title="pageTitle" />
     <AppLayout>
-        <template #title>Store Audit</template>
+        <template #title>{{ pageTitle }}</template>
 
         <div class="space-y-6">
-            <div class="flex justify-end">
-                <Link href="/billing" class="btn btn-secondary">
-                    View billing
-                </Link>
+            <div class="flex flex-wrap items-center justify-between gap-3">
+                <div>
+                    <h2 class="text-base font-bold text-zinc-950">{{ pageTitle }}</h2>
+                    <p class="text-sm text-zinc-500">{{ pageDescription }}</p>
+                </div>
+                <div class="flex flex-wrap gap-2">
+                    <button v-if="!isAuditMode" class="btn btn-primary" type="button" @click="showConnectForm = !showConnectForm">
+                        <span>{{ showConnectForm ? 'Close store form' : 'Connect store' }}</span>
+                    </button>
+                    <Link v-if="isAuditMode" href="/stores" class="btn btn-secondary">
+                        Store center
+                    </Link>
+                    <Link v-else href="/store-audit" class="btn btn-secondary">
+                        Store audit
+                    </Link>
+                    <Link href="/billing" class="btn btn-secondary">
+                        View billing
+                    </Link>
+                </div>
             </div>
 
             <section v-if="showConnectForm" class="panel max-w-2xl">
@@ -306,7 +330,7 @@ const formatBytes = (bytes) => {
 
             <section class="panel">
                 <div class="panel-header">
-                    <h2 class="text-sm font-bold text-zinc-950">Connected stores</h2>
+                    <h2 class="text-sm font-bold text-zinc-950">{{ isAuditMode ? 'Store audit data' : 'Connected store' }}</h2>
                 </div>
                 <div class="table-wrap">
                     <table class="data-table">
@@ -364,7 +388,7 @@ const formatBytes = (bytes) => {
                                     </div>
                                 </td>
                             </tr>
-                            <tr v-if="store.latest_analysis">
+                            <tr v-if="isAuditMode && store.latest_analysis">
                                 <td colspan="9" class="!whitespace-normal bg-zinc-50">
                                     <div class="space-y-4 rounded-md border border-zinc-200 bg-white p-4">
                                         <div class="flex flex-wrap items-start justify-between gap-3">

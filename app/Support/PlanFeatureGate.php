@@ -27,6 +27,7 @@ class PlanFeatureGate
     {
         return [
             'dashboard' => true,
+            'stores' => true,
             'billing' => true,
             'products' => self::allows($account, 'product_descriptions'),
             'collections' => self::allows($account, 'collection_descriptions'),

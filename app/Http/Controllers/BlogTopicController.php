@@ -2,7 +2,6 @@
 
 namespace App\Http\Controllers;
 
-use App\Jobs\GenerateBlogTopicsJob;
 use App\Models\AIGeneration;
 use App\Models\BlogTopic;
 use App\Models\ShopifyCollection;
@@ -16,6 +15,7 @@ use Illuminate\Support\Collection;
 use Inertia\Inertia;
 use Inertia\Response;
 use RuntimeException;
+use Throwable;
 
 class BlogTopicController extends Controller
 {
@@ -125,15 +125,15 @@ class BlogTopicController extends Controller
             return back()->withErrors(['credits' => $exception->getMessage()]);
         }
 
-        if (app()->environment('local') || config('queue.default') === 'sync') {
+        try {
             $topics->generate($store, $validated, $request->user());
 
             return back()->with('status', 'Topic generation completed.');
+        } catch (Throwable $exception) {
+            return back()->withErrors([
+                'topics' => $exception->getMessage(),
+            ]);
         }
-
-        GenerateBlogTopicsJob::dispatch($store->id, $validated, $request->user()->id);
-
-        return back()->with('status', 'Topic generation queued.');
     }
 
     private function targetRegion(array $data): ?string
@@ -204,7 +204,13 @@ class BlogTopicController extends Controller
         ]);
 
         if ($request->boolean('generate_blog')) {
-            app(BlogGenerationService::class)->generateFromTopic($topic->fresh(), $request->user());
+            try {
+                app(BlogGenerationService::class)->generateFromTopic($topic->fresh(), $request->user());
+            } catch (Throwable $exception) {
+                return back()->withErrors([
+                    'topics' => $exception->getMessage(),
+                ]);
+            }
 
             return back()->with('status', 'Topic approved and blog draft generated.');
         }
@@ -233,7 +239,13 @@ class BlogTopicController extends Controller
             ]);
         }
 
-        app(BlogGenerationService::class)->generateFromTopic($topic, $request->user());
+        try {
+            app(BlogGenerationService::class)->generateFromTopic($topic, $request->user());
+        } catch (Throwable $exception) {
+            return back()->withErrors([
+                'topics' => $exception->getMessage(),
+            ]);
+        }
 
         return back()->with('status', 'Blog draft generated.');
     }
@@ -261,7 +273,13 @@ class BlogTopicController extends Controller
                 ]);
             }
 
-            app(BlogGenerationService::class)->generateFromTopic($topic, $request->user());
+            try {
+                app(BlogGenerationService::class)->generateFromTopic($topic, $request->user());
+            } catch (Throwable $exception) {
+                return back()->withErrors([
+                    'topics' => $exception->getMessage(),
+                ]);
+            }
         }
 
         return back()->with('status', 'Selected blog drafts generated.');

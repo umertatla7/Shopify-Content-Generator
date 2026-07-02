@@ -165,7 +165,7 @@ const pushContent = async (publish = false) => {
                     <div v-if="productMetric" class="rounded-md border border-zinc-200 bg-zinc-50 px-3 py-2 text-xs font-semibold text-zinc-700">
                         {{ productMetric.used }}/{{ productMetric.limit ?? 'Unlimited' }} product descriptions used this month
                     </div>
-                    <Link href="/store-audit" class="btn btn-secondary">Open store audit</Link>
+                    <Link href="/stores" class="btn btn-secondary">Open store center</Link>
                 </div>
             </div>
 

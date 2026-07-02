@@ -83,7 +83,7 @@ Route::middleware('auth')->group(function (): void {
     });
 
     Route::get('/stores', [ShopifyStoreController::class, 'index'])->name('stores.index');
-    Route::get('/store-audit', [ShopifyStoreController::class, 'index'])->name('store-audit.index');
+    Route::get('/store-audit', [ShopifyStoreController::class, 'audit'])->name('store-audit.index');
     Route::post('/stores', [ShopifyStoreController::class, 'store'])->name('stores.store')->middleware('throttle:10,1');
     Route::post('/stores/{store}/sync', [ShopifyStoreController::class, 'sync'])->name('stores.sync');
     Route::post('/stores/{store}/analysis', [StoreAnalysisController::class, 'store'])->name('stores.analysis.store');

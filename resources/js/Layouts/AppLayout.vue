@@ -56,6 +56,7 @@ const withShopifyContext = (href) => {
 
 const customerItems = computed(() => [
     { href: '/dashboard', label: 'Dashboard', icon: BarChart3, show: true, locked: false },
+    { href: '/stores', label: 'Store', icon: ShoppingBag, show: permissions.value['stores.view'] || permissions.value['stores.manage'] || permissions.value['stores.sync'], locked: false },
     { href: '/store-audit', label: 'Store Audit', icon: ShoppingBag, show: true, locked: !planAccess.value.store_audit },
     { href: '/billing', label: 'Billing', icon: CreditCard, show: permissions.value['billing.manage'] || permissions.value['stores.manage'], locked: false },
     { href: '/products', label: 'Products', icon: Package, show: permissions.value['stores.view'] || permissions.value['stores.manage'] || permissions.value['stores.sync'], locked: !planAccess.value.products },
