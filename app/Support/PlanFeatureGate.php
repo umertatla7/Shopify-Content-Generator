@@ -43,6 +43,46 @@ class PlanFeatureGate
     public static function preview(string $module): array
     {
         return match ($module) {
+            'products' => [
+                'title' => 'Products',
+                'description' => 'Unlock AI product content generation, review workflows, and Shopify push tools for synced products.',
+                'highlights' => ['Product title and description generation', 'SEO field updates', 'Push to Shopify with review flow'],
+                'metrics' => [
+                    ['label' => 'Products synced', 'value' => '124'],
+                    ['label' => 'Ready for content', 'value' => '38'],
+                    ['label' => 'SEO uplift', 'value' => '+22%'],
+                ],
+            ],
+            'collections' => [
+                'title' => 'Collections',
+                'description' => 'Unlock collection copy generation, SEO updates, and Shopify collection optimization workflows.',
+                'highlights' => ['Collection description generation', 'SEO metadata', 'Collection content refresh'],
+                'metrics' => [
+                    ['label' => 'Collections tracked', 'value' => '16'],
+                    ['label' => 'Missing copy', 'value' => '6'],
+                    ['label' => 'Ready to optimize', 'value' => '12'],
+                ],
+            ],
+            'topics' => [
+                'title' => 'Topics',
+                'description' => 'Unlock AI topic generation, approval flow, and blog draft creation for your content plan.',
+                'highlights' => ['Topic idea generation', 'Collection-aware topics', 'Draft creation from approvals'],
+                'metrics' => [
+                    ['label' => 'Ideas in queue', 'value' => '18'],
+                    ['label' => 'Approved angles', 'value' => '9'],
+                    ['label' => 'Draft opportunities', 'value' => '6'],
+                ],
+            ],
+            'blogs' => [
+                'title' => 'Blogs',
+                'description' => 'Unlock AI blog drafting, editing, scheduling, and Shopify publishing workflows.',
+                'highlights' => ['Draft and review workflow', 'Scheduling and publishing', 'AI body generation'],
+                'metrics' => [
+                    ['label' => 'Drafts', 'value' => '11'],
+                    ['label' => 'Approved', 'value' => '4'],
+                    ['label' => 'Scheduled', 'value' => '2'],
+                ],
+            ],
             'store_audit' => [
                 'title' => 'Store Audit',
                 'description' => 'Unlock technical, content, and storefront audit data for the connected Shopify store.',

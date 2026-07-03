@@ -9,6 +9,7 @@ use App\Models\ShopifyStore;
 use App\Services\BlogGenerationService;
 use App\Services\BlogTopicService;
 use App\Services\CreditService;
+use App\Support\PlanFeatureGate;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
@@ -28,6 +29,10 @@ class BlogTopicController extends Controller
         $this->authorize('viewAny', BlogTopic::class);
 
         $accountId = $request->user()->current_account_id;
+
+        if (! PlanFeatureGate::moduleAccess($request->user()->currentAccount)['topics']) {
+            return Inertia::render('FeaturePreview', PlanFeatureGate::preview('topics'));
+        }
 
         $credits = app(CreditService::class);
 
@@ -75,6 +80,7 @@ class BlogTopicController extends Controller
     {
         $this->authorize('create', BlogTopic::class);
         $this->authorize('view', $store);
+        abort_unless(PlanFeatureGate::moduleAccess($request->user()->currentAccount)['topics'], 403);
 
         $validated = $request->validate([
             'count' => ['required', 'integer', 'min:1', 'max:25'],
@@ -178,6 +184,7 @@ class BlogTopicController extends Controller
     public function update(Request $request, BlogTopic $topic): RedirectResponse
     {
         $this->authorize('update', $topic);
+        abort_unless(PlanFeatureGate::moduleAccess($request->user()->currentAccount)['topics'], 403);
 
         $validated = $request->validate([
             'title' => ['required', 'string', 'max:255'],
@@ -196,6 +203,7 @@ class BlogTopicController extends Controller
     public function approve(Request $request, BlogTopic $topic): RedirectResponse
     {
         $this->authorize('approve', $topic);
+        abort_unless(PlanFeatureGate::moduleAccess($request->user()->currentAccount)['topics'], 403);
 
         $topic->update([
             'status' => 'approved',
@@ -221,6 +229,7 @@ class BlogTopicController extends Controller
     public function reject(BlogTopic $topic): RedirectResponse
     {
         $this->authorize('update', $topic);
+        abort_unless(PlanFeatureGate::moduleAccess(request()->user()->currentAccount)['topics'], 403);
 
         $topic->update(['status' => 'rejected']);
 
@@ -230,6 +239,7 @@ class BlogTopicController extends Controller
     public function generateBlog(Request $request, BlogTopic $topic): RedirectResponse
     {
         $this->authorize('approve', $topic);
+        abort_unless(PlanFeatureGate::moduleAccess($request->user()->currentAccount)['topics'], 403);
 
         if ($topic->status !== 'approved') {
             $topic->update([
@@ -252,6 +262,8 @@ class BlogTopicController extends Controller
 
     public function generateSelectedBlogs(Request $request): RedirectResponse
     {
+        abort_unless(PlanFeatureGate::moduleAccess($request->user()->currentAccount)['topics'], 403);
+
         $validated = $request->validate([
             'topic_ids' => ['required', 'array', 'min:1'],
             'topic_ids.*' => ['integer', 'exists:blog_topics,id'],

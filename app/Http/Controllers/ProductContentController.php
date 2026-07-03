@@ -6,6 +6,7 @@ use App\Models\Product;
 use App\Services\PlanLimitService;
 use App\Services\ProductContentService;
 use App\Services\Shopify\ShopifyService;
+use App\Support\PlanFeatureGate;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Arr;
@@ -102,6 +103,7 @@ class ProductContentController extends Controller
     {
         abort_unless($product->account_id === $request->user()->current_account_id, 403);
         abort_unless($request->user()->hasAccountPermission('stores.manage'), 403);
+        abort_unless(PlanFeatureGate::moduleAccess($request->user()->currentAccount)['products'], 403);
     }
 
     private function payload(Product $product): array

@@ -6,6 +6,7 @@ use App\Models\ActivityLog;
 use App\Models\ShopifyCollection;
 use App\Services\CollectionContentService;
 use App\Services\Shopify\ShopifyService;
+use App\Support\PlanFeatureGate;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Arr;
@@ -103,6 +104,7 @@ class CollectionContentController extends Controller
     {
         abort_unless($collection->account_id === $request->user()->current_account_id, 403);
         abort_unless($request->user()->hasAccountPermission('stores.manage'), 403);
+        abort_unless(PlanFeatureGate::moduleAccess($request->user()->currentAccount)['collections'], 403);
     }
 
     private function payload(ShopifyCollection $collection): array

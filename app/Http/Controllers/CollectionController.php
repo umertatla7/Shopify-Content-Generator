@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\ShopifyCollection;
 use App\Models\ShopifyStore;
 use App\Services\CreditService;
+use App\Support\PlanFeatureGate;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -17,6 +18,10 @@ class CollectionController extends Controller
 
         abort_unless($accountId, 403);
         abort_unless($request->user()->hasAccountPermission('stores.view') || $request->user()->hasAccountPermission('stores.manage'), 403);
+
+        if (! PlanFeatureGate::moduleAccess($request->user()->currentAccount)['collections']) {
+            return Inertia::render('FeaturePreview', PlanFeatureGate::preview('collections'));
+        }
 
         $filters = $request->validate([
             'search' => ['nullable', 'string', 'max:255'],

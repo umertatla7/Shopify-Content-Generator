@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\Blog;
+use App\Support\PlanFeatureGate;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 
@@ -11,6 +12,7 @@ class BlogWorkflowController extends Controller
     public function markNeedsReview(Blog $blog): RedirectResponse
     {
         $this->authorize('update', $blog);
+        abort_unless(PlanFeatureGate::moduleAccess(request()->user()->currentAccount)['blogs'], 403);
 
         $blog->update(['status' => Blog::STATUS_NEEDS_REVIEW]);
 
@@ -20,6 +22,7 @@ class BlogWorkflowController extends Controller
     public function approve(Request $request, Blog $blog): RedirectResponse
     {
         $this->authorize('approve', $blog);
+        abort_unless(PlanFeatureGate::moduleAccess($request->user()->currentAccount)['blogs'], 403);
 
         $blog->update([
             'status' => Blog::STATUS_APPROVED,
@@ -34,6 +37,7 @@ class BlogWorkflowController extends Controller
     public function reject(Blog $blog): RedirectResponse
     {
         $this->authorize('approve', $blog);
+        abort_unless(PlanFeatureGate::moduleAccess(request()->user()->currentAccount)['blogs'], 403);
 
         $blog->update(['status' => Blog::STATUS_REJECTED]);
 
@@ -43,6 +47,7 @@ class BlogWorkflowController extends Controller
     public function assign(Request $request, Blog $blog): RedirectResponse
     {
         $this->authorize('update', $blog);
+        abort_unless(PlanFeatureGate::moduleAccess($request->user()->currentAccount)['blogs'], 403);
 
         $validated = $request->validate([
             'assigned_to' => ['nullable', 'integer', 'exists:users,id'],

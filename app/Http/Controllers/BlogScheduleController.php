@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\Blog;
 use App\Services\BlogSchedulingService;
+use App\Support\PlanFeatureGate;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 
@@ -12,6 +13,7 @@ class BlogScheduleController extends Controller
     public function store(Request $request, Blog $blog, BlogSchedulingService $schedules): RedirectResponse
     {
         $this->authorize('approve', $blog);
+        abort_unless(PlanFeatureGate::moduleAccess($request->user()->currentAccount)['schedule'], 403);
 
         $validated = $request->validate([
             'scheduled_for' => ['required', 'date', 'after:now'],

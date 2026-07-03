@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\Blog;
 use App\Services\BlogGenerationService;
+use App\Support\PlanFeatureGate;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -14,6 +15,7 @@ class BlogBodyGenerationController extends Controller
     public function __invoke(Request $request, Blog $blog, BlogGenerationService $blogs): RedirectResponse|JsonResponse
     {
         $this->authorize('update', $blog);
+        abort_unless(PlanFeatureGate::moduleAccess($request->user()->currentAccount)['blogs'], 403);
 
         $validated = $request->validate([
             'title' => ['sometimes', 'required', 'string', 'max:255'],

@@ -40,6 +40,7 @@ const planForms = reactive(Object.fromEntries(props.plans.map((plan) => [
     plan.id,
     {
         ...plan,
+        features: [...(plan.features ?? [])],
         features_text: (plan.features ?? []).join('\n'),
     },
 ])));
@@ -48,6 +49,25 @@ const normalizeFeatures = (value) => String(value || '')
     .split('\n')
     .map((item) => item.trim())
     .filter(Boolean);
+
+const mergeFeatures = (features, text) => Array.from(new Set([
+    ...(Array.isArray(features) ? features : []),
+    ...normalizeFeatures(text),
+]));
+
+const syncFeatureText = (target) => {
+    target.features_text = (target.features ?? []).join('\n');
+};
+
+const syncFeatureArray = (target) => {
+    target.features = mergeFeatures([], target.features_text);
+    target.features_text = (target.features ?? []).join('\n');
+};
+
+const syncNewFeatureArray = () => {
+    newForm.features = mergeFeatures([], newFeaturesText.value);
+    newFeaturesText.value = newForm.features.join('\n');
+};
 
 const resetNewForm = () => {
     newForm.reset();
@@ -76,10 +96,8 @@ const resetNewForm = () => {
 };
 
 const submitNew = () => {
-    newForm.features = Array.from(new Set([
-        ...newForm.features,
-        ...normalizeFeatures(newFeaturesText.value),
-    ]));
+    newForm.features = mergeFeatures(newForm.features, newFeaturesText.value);
+    newFeaturesText.value = newForm.features.join('\n');
 
     newForm.post('/admin/plans', {
         preserveScroll: true,
@@ -89,6 +107,10 @@ const submitNew = () => {
 
 const savePlan = (plan) => {
     const form = planForms[plan.id];
+    const features = mergeFeatures(form.features, form.features_text);
+
+    form.features = features;
+    form.features_text = features.join('\n');
 
     router.patch(`/admin/plans/${plan.id}`, {
         key: form.key,
@@ -110,7 +132,7 @@ const savePlan = (plan) => {
         tracked_keyword_limit: form.tracked_keyword_limit,
         credit_expires_after_days: form.credit_expires_after_days,
         shopify_billing_plan_handle: form.shopify_billing_plan_handle,
-        features: normalizeFeatures(form.features_text),
+        features,
         is_active: Boolean(form.is_active),
     }, { preserveScroll: true });
 };
@@ -219,6 +241,7 @@ const planTone = (key) => ({
                                     :value="feature.key"
                                     type="checkbox"
                                     class="mt-1 size-4 rounded border-zinc-300 p-0"
+                                    @change="newFeaturesText = newForm.features.join('\n')"
                                 />
                                 <div>
                                     <div class="font-semibold text-zinc-950">{{ feature.label }}</div>
@@ -227,7 +250,7 @@ const planTone = (key) => ({
                             </div>
                         </label>
                     </div>
-                    <textarea v-model="newFeaturesText" class="mt-3 min-h-20 font-mono text-xs" placeholder="Optional raw flags, one per line" />
+                    <textarea v-model="newFeaturesText" class="mt-3 min-h-20 font-mono text-xs" placeholder="Optional raw flags, one per line" @blur="syncNewFeatureArray" />
                 </div>
                 <label class="flex items-center gap-2 text-sm font-medium text-zinc-700">
                     <input v-model="newForm.is_active" type="checkbox" class="size-4 rounded border-zinc-300 p-0" />
@@ -360,14 +383,11 @@ const planTone = (key) => ({
                                 >
                                     <div class="flex items-start gap-3">
                                         <input
-                                            :checked="normalizeFeatures(planForms[plan.id].features_text).includes(feature.key)"
+                                            v-model="planForms[plan.id].features"
+                                            :value="feature.key"
                                             type="checkbox"
                                             class="mt-1 size-4 rounded border-zinc-300 p-0"
-                                            @change="(event) => {
-                                                const next = new Set(normalizeFeatures(planForms[plan.id].features_text));
-                                                if (event.target.checked) next.add(feature.key); else next.delete(feature.key);
-                                                planForms[plan.id].features_text = Array.from(next).join('\n');
-                                            }"
+                                            @change="syncFeatureText(planForms[plan.id])"
                                         />
                                         <div>
                                             <div class="font-semibold text-zinc-950">{{ feature.label }}</div>
@@ -376,7 +396,7 @@ const planTone = (key) => ({
                                     </div>
                                 </label>
                             </div>
-                            <textarea v-model="planForms[plan.id].features_text" class="mt-3 min-h-20 font-mono text-xs" />
+                            <textarea v-model="planForms[plan.id].features_text" class="mt-3 min-h-20 font-mono text-xs" @blur="syncFeatureArray(planForms[plan.id])" />
                         </div>
                     </div>
                 </div>

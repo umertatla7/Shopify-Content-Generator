@@ -8,6 +8,7 @@ use App\Models\ShopifyStore;
 use App\Services\BlogGenerationService;
 use App\Services\SEOScoringService;
 use App\Services\Shopify\ShopifyService;
+use App\Support\PlanFeatureGate;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Arr;
@@ -25,6 +26,11 @@ class BlogController extends Controller
         $this->authorize('viewAny', Blog::class);
 
         $accountId = $request->user()->current_account_id;
+
+        if (! PlanFeatureGate::moduleAccess($request->user()->currentAccount)['blogs']) {
+            return Inertia::render('FeaturePreview', PlanFeatureGate::preview('blogs'));
+        }
+
         $filters = $request->only(['store', 'status', 'keyword', 'created_from', 'scheduled_from', 'published_from']);
 
         $blogs = Blog::query()
@@ -62,6 +68,8 @@ class BlogController extends Controller
     public function edit(Blog $blog): Response
     {
         $this->authorize('view', $blog);
+
+        abort_unless(PlanFeatureGate::moduleAccess(request()->user()->currentAccount)['blogs'], 403);
 
         return Inertia::render('Blogs/Edit', [
             'blog' => $blog->load(['store:id,name,brand_tone,timezone', 'topic', 'assignee:id,name', 'comments.user:id,name', 'revisions.user:id,name']),

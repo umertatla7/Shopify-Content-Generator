@@ -6,6 +6,7 @@ use App\Models\Product;
 use App\Models\ShopifyStore;
 use App\Services\CreditService;
 use App\Services\PlanLimitService;
+use App\Support\PlanFeatureGate;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -17,6 +18,10 @@ class ProductController extends Controller
         $accountId = $request->user()->current_account_id;
 
         abort_unless($accountId, 403);
+
+        if (! PlanFeatureGate::moduleAccess($request->user()->currentAccount)['products']) {
+            return Inertia::render('FeaturePreview', PlanFeatureGate::preview('products'));
+        }
 
         $filters = $request->validate([
             'search' => ['nullable', 'string', 'max:255'],
