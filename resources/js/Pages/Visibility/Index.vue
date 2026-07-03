@@ -119,6 +119,12 @@ const sourceCards = computed(() => {
         ['Answer pages', snapshot.pages?.answer_pages ?? 0, 'FAQ, policy, trust pages', CheckCircle2],
     ];
 });
+const platformDefinitions = [
+    { key: 'chatgpt', name: 'ChatGPT', iconText: 'GPT', iconClass: 'border-emerald-200 bg-emerald-50 text-emerald-700' },
+    { key: 'claude', name: 'Claude', iconText: 'CL', iconClass: 'border-amber-200 bg-amber-50 text-amber-700' },
+    { key: 'gemini', name: 'Gemini', iconText: 'GM', iconClass: 'border-violet-200 bg-violet-50 text-violet-700' },
+    { key: 'perplexity', name: 'Perplexity', iconText: 'PX', iconClass: 'border-sky-200 bg-sky-50 text-sky-700' },
+];
 const platformReadiness = computed(() => {
     if (!report.value) return [];
 
@@ -139,6 +145,7 @@ const platformReadiness = computed(() => {
 
     return [
         {
+            key: 'chatgpt',
             name: 'ChatGPT',
             ready: promptCoverageReady && answerPagesReady && brandReady,
             checks: [
@@ -148,6 +155,7 @@ const platformReadiness = computed(() => {
             ],
         },
         {
+            key: 'gemini',
             name: 'Gemini',
             ready: technicalReady && sourceDepthReady && collectionCoverage,
             checks: [
@@ -157,6 +165,7 @@ const platformReadiness = computed(() => {
             ],
         },
         {
+            key: 'perplexity',
             name: 'Perplexity',
             ready: blogCoverage && answerPagesReady && promptCoverageReady,
             checks: [
@@ -166,6 +175,7 @@ const platformReadiness = computed(() => {
             ],
         },
         {
+            key: 'claude',
             name: 'Claude',
             ready: brandReady && productCoverage && sourceDepthReady,
             checks: [
@@ -174,7 +184,10 @@ const platformReadiness = computed(() => {
                 { label: 'Source depth', passed: sourceDepthReady },
             ],
         },
-    ];
+    ].map((platform) => ({
+        ...platform,
+        ...platformDefinitions.find((item) => item.key === platform.key),
+    }));
 });
 
 const scoreLabel = (score) => {
@@ -275,6 +288,49 @@ const entityTypeLabel = (value) => {
     if (value.endsWith('Blog')) return 'Blog';
 
     return value.split('\\').pop();
+};
+const promptNumber = (prompt, keys) => {
+    for (const key of keys) {
+        const value = Number(prompt?.evidence?.[key]);
+
+        if (Number.isFinite(value) && value > 0) {
+            return value;
+        }
+    }
+
+    return 0;
+};
+const promptHasSource = (prompt) => Boolean(prompt?.recommended_source_url || prompt?.evidence?.source_url);
+const promptPlatformPasses = (prompt, platformKey) => {
+    const score = Number(prompt?.score ?? 0);
+    const status = String(prompt?.status ?? '').toLowerCase();
+    const intent = String(prompt?.intent ?? '').toLowerCase();
+    const evidence = prompt?.evidence ?? {};
+    const hasSource = promptHasSource(prompt);
+    const descriptionWords = promptNumber(prompt, ['description_words']);
+    const pageWords = promptNumber(prompt, ['page_words']);
+    const bodyWords = promptNumber(prompt, ['body_words']);
+    const brandSummaryWords = promptNumber(prompt, ['brand_summary_words']);
+    const brandProfileWords = promptNumber(prompt, ['brand_profile_words', 'audience_profile_words']);
+    const relatedBlogs = promptNumber(prompt, ['related_blogs']);
+    const linkCount = promptNumber(prompt, ['link_count']);
+    const faqCount = promptNumber(prompt, ['faq_count']);
+    const answerIntentPage = Boolean(evidence.answer_intent_page);
+    const hasFaq = Boolean(evidence.has_faq) || faqCount > 0;
+    const contentDepth = Math.max(descriptionWords, pageWords, bodyWords, brandSummaryWords, brandProfileWords);
+    const intentMatchesBrand = ['brand_overview', 'brand_differentiation', 'brand_policy_clarity', 'brand_audience_fit', 'brand_trust'].includes(intent);
+    const intentMatchesBuying = ['buying_guide', 'product_education', 'commercial_answer'].includes(intent);
+
+    if (status === 'missing' || score < 45) {
+        return false;
+    }
+
+    return {
+        chatgpt: score >= 60 && (intentMatchesBrand || intentMatchesBuying || answerIntentPage) && (hasSource || contentDepth >= 80),
+        gemini: score >= 60 && contentDepth >= 80 && (hasSource || descriptionWords >= 100 || pageWords >= 140),
+        perplexity: score >= 60 && hasSource && (hasFaq || linkCount > 0 || relatedBlogs > 0 || answerIntentPage),
+        claude: score >= 60 && (contentDepth >= 80 || intentMatchesBrand) && status !== 'missing',
+    }[platformKey] ?? false;
 };
 const trendPoints = (key) => {
     if (!trendHistory.value.length) return '';
@@ -440,7 +496,12 @@ const trendPoints = (key) => {
                     <div class="grid gap-3 p-4 md:grid-cols-2 xl:grid-cols-4">
                         <article v-for="platform in platformReadiness" :key="platform.name" class="rounded-lg border border-zinc-200 p-4">
                             <div class="flex items-center justify-between gap-3">
-                                <h3 class="text-sm font-bold text-zinc-950">{{ platform.name }}</h3>
+                                <div class="flex items-center gap-3">
+                                    <div class="grid h-10 w-10 place-items-center rounded-xl border text-[11px] font-black tracking-wide" :class="platform.iconClass">
+                                        {{ platform.iconText }}
+                                    </div>
+                                    <h3 class="text-sm font-bold text-zinc-950">{{ platform.name }}</h3>
+                                </div>
                                 <span class="rounded-full px-2 py-1 text-xs font-bold" :class="platform.ready ? 'bg-emerald-100 text-emerald-800' : 'bg-rose-100 text-rose-800'">
                                     {{ platform.ready ? 'Ready' : 'Needs work' }}
                                 </span>
@@ -453,6 +514,89 @@ const trendPoints = (key) => {
                                 </div>
                             </div>
                         </article>
+                    </div>
+                </section>
+
+                <section class="panel">
+                    <div class="panel-header">
+                        <div>
+                            <h2 class="text-sm font-bold text-zinc-950">Prompt evidence</h2>
+                            <p class="text-xs text-zinc-500">Filter prompt gaps by status, intent, and entity type, then review platform-by-platform fit for each prompt.</p>
+                        </div>
+                    </div>
+                    <div class="panel-body border-b border-zinc-200">
+                        <div class="grid gap-3 md:grid-cols-3">
+                            <div>
+                                <label>Status</label>
+                                <select v-model="promptFilters.status">
+                                    <option value="">All statuses</option>
+                                    <option value="missing">Missing</option>
+                                    <option value="partial">Partial</option>
+                                    <option value="covered">Covered</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label>Intent</label>
+                                <select v-model="promptFilters.intent">
+                                    <option value="">All intents</option>
+                                    <option v-for="intent in availablePromptIntents" :key="intent" :value="intent">{{ intent.replaceAll('_', ' ') }}</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label>Entity type</label>
+                                <select v-model="promptFilters.entity">
+                                    <option value="">All entity types</option>
+                                    <option v-for="entity in availablePromptEntities" :key="entity" :value="entity">{{ entityTypeLabel(entity) }}</option>
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="table-wrap">
+                        <table class="data-table">
+                            <thead>
+                                <tr>
+                                    <th>Prompt</th>
+                                    <th v-for="platform in platformDefinitions" :key="platform.key" class="text-center">
+                                        <div class="flex items-center justify-center gap-2">
+                                            <div class="grid h-7 w-7 place-items-center rounded-lg border text-[10px] font-black tracking-wide" :class="platform.iconClass">
+                                                {{ platform.iconText }}
+                                            </div>
+                                            <span>{{ platform.name }}</span>
+                                        </div>
+                                    </th>
+                                    <th>Status</th>
+                                    <th>Score</th>
+                                    <th>Evidence</th>
+                                </tr>
+                            </thead>
+                            <tbody class="divide-y divide-zinc-100">
+                                <tr v-for="prompt in filteredPromptChecks" :key="prompt.id">
+                                    <td class="max-w-md px-4 py-3">
+                                        <p class="font-semibold text-zinc-950">{{ prompt.prompt }}</p>
+                                        <p class="mt-1 text-xs text-zinc-500">{{ prompt.intent?.replaceAll('_', ' ') }}</p>
+                                        <p class="mt-1 text-xs text-zinc-400">{{ prompt.target_entity_label || '-' }}</p>
+                                    </td>
+                                    <td v-for="platform in platformDefinitions" :key="`${prompt.id}-${platform.key}`" class="px-4 py-3 text-center">
+                                        <div class="flex justify-center">
+                                            <CheckCircle2 v-if="promptPlatformPasses(prompt, platform.key)" class="size-5 text-emerald-600" />
+                                            <XCircle v-else class="size-5 text-rose-600" />
+                                        </div>
+                                    </td>
+                                    <td class="px-4 py-3">
+                                        <span class="rounded-full px-2 py-1 text-xs font-bold capitalize" :class="promptStatusClass(prompt.status)">{{ prompt.status }}</span>
+                                    </td>
+                                    <td class="px-4 py-3 font-bold">{{ prompt.score }}</td>
+                                    <td class="max-w-sm px-4 py-3 text-xs text-zinc-500 text-wrap-anywhere">
+                                        <span v-for="(value, key) in (prompt.evidence ?? {})" :key="key" class="mr-2 inline-block">
+                                            {{ key }}: {{ evidenceValue(value) }}
+                                        </span>
+                                    </td>
+                                </tr>
+                                <tr v-if="!filteredPromptChecks.length">
+                                    <td :colspan="platformDefinitions.length + 4" class="px-4 py-8 text-center text-zinc-500">No prompts match the current filters.</td>
+                                </tr>
+                            </tbody>
+                        </table>
                     </div>
                 </section>
 
@@ -669,76 +813,6 @@ const trendPoints = (key) => {
                                 <p class="mt-3 text-sm text-zinc-600">AEO {{ point.aeo_score }} · GEO {{ point.geo_score }} · Prompt coverage {{ point.prompt_coverage_score }}</p>
                             </div>
                         </div>
-                    </div>
-                </section>
-
-                <section class="panel">
-                    <div class="panel-header">
-                        <div>
-                            <h2 class="text-sm font-bold text-zinc-950">Prompt evidence</h2>
-                            <p class="text-xs text-zinc-500">Filter prompt gaps by status, intent, and entity type.</p>
-                        </div>
-                    </div>
-                    <div class="panel-body border-b border-zinc-200">
-                        <div class="grid gap-3 md:grid-cols-3">
-                            <div>
-                                <label>Status</label>
-                                <select v-model="promptFilters.status">
-                                    <option value="">All statuses</option>
-                                    <option value="missing">Missing</option>
-                                    <option value="partial">Partial</option>
-                                    <option value="covered">Covered</option>
-                                </select>
-                            </div>
-                            <div>
-                                <label>Intent</label>
-                                <select v-model="promptFilters.intent">
-                                    <option value="">All intents</option>
-                                    <option v-for="intent in availablePromptIntents" :key="intent" :value="intent">{{ intent.replaceAll('_', ' ') }}</option>
-                                </select>
-                            </div>
-                            <div>
-                                <label>Entity type</label>
-                                <select v-model="promptFilters.entity">
-                                    <option value="">All entity types</option>
-                                    <option v-for="entity in availablePromptEntities" :key="entity" :value="entity">{{ entityTypeLabel(entity) }}</option>
-                                </select>
-                            </div>
-                        </div>
-                    </div>
-                    <div class="table-wrap">
-                        <table class="data-table">
-                            <thead>
-                                <tr>
-                                    <th>Prompt</th>
-                                    <th>Status</th>
-                                    <th>Score</th>
-                                    <th>Entity</th>
-                                    <th>Evidence</th>
-                                </tr>
-                            </thead>
-                            <tbody class="divide-y divide-zinc-100">
-                                <tr v-for="prompt in filteredPromptChecks" :key="prompt.id">
-                                    <td class="max-w-md px-4 py-3">
-                                        <p class="font-semibold text-zinc-950">{{ prompt.prompt }}</p>
-                                        <p class="mt-1 text-xs text-zinc-500">{{ prompt.intent?.replaceAll('_', ' ') }}</p>
-                                    </td>
-                                    <td class="px-4 py-3">
-                                        <span class="rounded-full px-2 py-1 text-xs font-bold capitalize" :class="promptStatusClass(prompt.status)">{{ prompt.status }}</span>
-                                    </td>
-                                    <td class="px-4 py-3 font-bold">{{ prompt.score }}</td>
-                                    <td class="px-4 py-3 text-zinc-600">{{ prompt.target_entity_label || '-' }}</td>
-                                    <td class="max-w-sm px-4 py-3 text-xs text-zinc-500 text-wrap-anywhere">
-                                        <span v-for="(value, key) in (prompt.evidence ?? {})" :key="key" class="mr-2 inline-block">
-                                            {{ key }}: {{ evidenceValue(value) }}
-                                        </span>
-                                    </td>
-                                </tr>
-                                <tr v-if="!filteredPromptChecks.length">
-                                    <td colspan="5" class="px-4 py-8 text-center text-zinc-500">No prompts match the current filters.</td>
-                                </tr>
-                            </tbody>
-                        </table>
                     </div>
                 </section>
 
