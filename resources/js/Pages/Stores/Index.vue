@@ -381,10 +381,16 @@ const formatBytes = (bytes) => {
                                 </td>
                                 <td>
                                     <div class="flex gap-2">
-                                        <button class="btn btn-secondary" title="Sync" @click="sync(store)"><RefreshCw class="size-4" /></button>
-                                        <button class="btn btn-secondary" title="Analyze" @click="analyze(store)"><Brain class="size-4" /></button>
-                                        <Link class="btn btn-secondary" title="Knowledge base" :href="`/stores/${store.id}/knowledge-base`">Knowledge</Link>
-                                        <button class="btn btn-danger" title="Delete" @click="remove(store)"><Trash2 class="size-4" /></button>
+                                        <template v-if="isAuditMode">
+                                            <button class="btn btn-secondary" title="Run store audit" @click="analyze(store)">
+                                                <Brain class="size-4" />
+                                            </button>
+                                        </template>
+                                        <template v-else>
+                                            <button class="btn btn-secondary" title="Sync" @click="sync(store)"><RefreshCw class="size-4" /></button>
+                                            <Link class="btn btn-secondary" title="Knowledge base" :href="`/stores/${store.id}/knowledge-base`">Knowledge</Link>
+                                            <button class="btn btn-danger" title="Delete" @click="remove(store)"><Trash2 class="size-4" /></button>
+                                        </template>
                                     </div>
                                 </td>
                             </tr>

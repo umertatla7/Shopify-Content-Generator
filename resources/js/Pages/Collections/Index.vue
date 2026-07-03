@@ -10,6 +10,7 @@ const props = defineProps({
     credits: Object,
     collectionCreditCosts: Object,
     stores: Array,
+    primaryStore: Object,
 });
 
 const selected = ref(null);
@@ -18,6 +19,7 @@ const contentError = ref('');
 const contentStatus = ref('');
 const generatingContent = ref(false);
 const pushingContent = ref(false);
+const syncingStore = ref(false);
 const benefitsText = ref('[]');
 const faqText = ref('[]');
 const contentForm = ref({
@@ -51,6 +53,31 @@ const collectionCountLabel = computed(() => {
 
 const selectedStyleCost = computed(() => props.collectionCreditCosts[contentForm.value.description_style] ?? props.collectionCreditCosts.balanced);
 const hasEnoughCredits = computed(() => selectedStyleCost.value <= creditBalance.value);
+const syncProgress = computed(() => {
+    const status = props.primaryStore?.latest_sync_log?.status;
+
+    if (status === 'completed' || status === 'failed') return 100;
+    if (status === 'running') return 65;
+    if (status === 'pending') return 25;
+
+    return props.primaryStore?.last_synced_at ? 100 : 0;
+});
+const syncLabel = computed(() => {
+    const log = props.primaryStore?.latest_sync_log;
+
+    if (!props.primaryStore) return 'No connected store';
+    if (!log) return props.primaryStore.last_synced_at ? 'Catalog synced' : 'Sync collections from Shopify to get started';
+    if (log.status === 'completed') {
+        const counts = log.counts || {};
+
+        return `${counts.products ?? 0} products, ${counts.collections ?? 0} collections, ${counts.pages ?? 0} pages, ${counts.existing_blogs ?? 0} blogs synced`;
+    }
+    if (log.status === 'failed') return log.error_message || 'Sync failed';
+    if (log.status === 'running') return 'Sync running';
+    if (log.status === 'pending') return 'Sync pending';
+
+    return log.status;
+});
 
 const plainDescription = (html) => {
     if (!html) return 'No description synced from Shopify.';
@@ -121,6 +148,16 @@ const openCollection = (collection) => {
         generated_handle: collection.generated_handle || collection.handle || '',
         generated_aeo_content: collection.generated_aeo_content || '',
     };
+};
+
+const syncStore = () => {
+    if (!props.primaryStore?.id) return;
+
+    syncingStore.value = true;
+    router.post(`/stores/${props.primaryStore.id}/sync`, {}, {
+        preserveScroll: true,
+        onFinish: () => syncingStore.value = false,
+    });
 };
 
 const generateContent = async () => {
@@ -198,11 +235,34 @@ const pushContent = async () => {
                     <p class="text-xs text-zinc-500">{{ collectionCountLabel }}</p>
                 </div>
                 <div class="flex flex-wrap gap-2">
+                    <button v-if="props.primaryStore?.id" class="btn btn-secondary" type="button" :disabled="syncingStore" @click="syncStore">
+                        <LoaderCircle v-if="syncingStore" class="size-4 animate-spin" />
+                        <RefreshCw v-else class="size-4" />
+                        Sync collections
+                    </button>
                     <button class="btn btn-secondary" type="button" @click="applyFilters">
                         <RefreshCw class="size-4" />
                         Refresh view
                     </button>
-                    <Link href="/stores" class="btn btn-secondary">Open store center</Link>
+                    <Link href="/stores" class="btn btn-secondary">Store center</Link>
+                </div>
+            </div>
+
+            <div v-if="props.primaryStore" class="panel-body border-b border-zinc-200">
+                <div class="rounded-lg border border-zinc-200 bg-zinc-50 p-4">
+                    <div class="flex flex-wrap items-center justify-between gap-3">
+                        <div>
+                            <div class="text-sm font-semibold text-zinc-950">{{ props.primaryStore.name }}</div>
+                            <div class="mt-1 text-xs text-zinc-500">{{ syncLabel }}</div>
+                        </div>
+                        <div class="text-right text-xs text-zinc-500">
+                            <div class="font-semibold text-zinc-700">{{ syncProgress }}%</div>
+                            <div>{{ props.primaryStore.last_synced_at ? new Date(props.primaryStore.last_synced_at).toLocaleString() : 'Not synced yet' }}</div>
+                        </div>
+                    </div>
+                    <div class="mt-3 h-2 overflow-hidden rounded-full bg-zinc-200">
+                        <div class="h-full rounded-full bg-teal-700 transition-all" :style="{ width: `${syncProgress}%` }" />
+                    </div>
                 </div>
             </div>
 

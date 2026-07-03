@@ -66,6 +66,7 @@ return [
         'api_version' => env('SHOPIFY_API_VERSION', '2026-04'),
         'timeout' => env('SHOPIFY_TIMEOUT', 30),
         'default_blog_id' => env('SHOPIFY_DEFAULT_BLOG_ID'),
+        'sync_via_queue' => env('SHOPIFY_SYNC_VIA_QUEUE', false),
         'public_app_api_key' => env('SHOPIFY_PUBLIC_APP_API_KEY'),
         'public_app_client_secret' => env('SHOPIFY_PUBLIC_APP_CLIENT_SECRET'),
         'public_app_url' => env('SHOPIFY_PUBLIC_APP_URL', env('APP_URL')),
@@ -73,6 +74,10 @@ return [
         'public_app_redirect_uri' => env('SHOPIFY_PUBLIC_APP_REDIRECT_URI'),
         'billing_test_mode' => env('SHOPIFY_BILLING_TEST_MODE', env('APP_ENV') !== 'production'),
         'manual_connection_mode' => env('SHOPIFY_MANUAL_CONNECTION_MODE', true),
+    ],
+
+    'store_analysis' => [
+        'via_queue' => env('STORE_ANALYSIS_VIA_QUEUE', false),
     ],
 
     'pagespeed' => [

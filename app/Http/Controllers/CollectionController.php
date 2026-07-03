@@ -57,6 +57,13 @@ class CollectionController extends Controller
                 'long' => $credits->collectionContentCost('long'),
             ],
             'stores' => ShopifyStore::forAccount($accountId)->orderBy('name')->get(['id', 'name']),
+            'primaryStore' => ShopifyStore::query()
+                ->forAccount($accountId)
+                ->with('latestSyncLog')
+                ->withCount(['products', 'collections', 'pages', 'blogs'])
+                ->orderByDesc('last_synced_at')
+                ->orderBy('name')
+                ->first(),
         ]);
     }
 }

@@ -403,7 +403,9 @@ class StoreAnalysisService
                     'source' => 'crawl_estimate',
                     'source_label' => 'Crawl estimate',
                     'error' => $exception->getMessage(),
-                    'note' => ucfirst($strategy).' PageSpeed Insights was not available, so these values are estimated from crawl signals. Add PAGESPEED_INSIGHTS_API_KEY for more reliable data.',
+                    'note' => $apiKey
+                        ? ucfirst($strategy).' PageSpeed Insights was temporarily unavailable, so these values are estimated from crawl signals.'
+                        : ucfirst($strategy).' PageSpeed Insights was not available, so these values are estimated from crawl signals. Add PAGESPEED_INSIGHTS_API_KEY for more reliable data.',
                 ];
             }
         }

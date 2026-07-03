@@ -166,7 +166,8 @@ class ShopifyStoreController extends Controller
             'status' => 'pending',
         ]);
 
-        if (app()->environment('local') || config('queue.default') === 'sync') {
+        if (! config('services.shopify.sync_via_queue', false) || app()->environment('local') || config('queue.default') === 'sync') {
+            $this->extendExecutionLimit();
             $log = $sync->syncStore($store->loadMissing('credential'), $log);
 
             return back()->with('status', $log->status === 'completed'
@@ -206,5 +207,12 @@ class ShopifyStoreController extends Controller
                 ->latest()
                 ->get(),
         ];
+    }
+
+    private function extendExecutionLimit(int $seconds = 120): void
+    {
+        if (function_exists('set_time_limit')) {
+            @set_time_limit($seconds);
+        }
     }
 }

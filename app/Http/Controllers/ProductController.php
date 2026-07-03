@@ -58,6 +58,13 @@ class ProductController extends Controller
                 'long' => $credits->productContentCost('long'),
             ],
             'stores' => ShopifyStore::forAccount($accountId)->orderBy('name')->get(['id', 'name']),
+            'primaryStore' => ShopifyStore::query()
+                ->forAccount($accountId)
+                ->with('latestSyncLog')
+                ->withCount(['products', 'collections', 'pages', 'blogs'])
+                ->orderByDesc('last_synced_at')
+                ->orderBy('name')
+                ->first(),
             'filterOptions' => [
                 'statuses' => Product::forAccount($accountId)->whereNotNull('status')->distinct()->orderBy('status')->pluck('status'),
                 'types' => Product::forAccount($accountId)->whereNotNull('product_type')->distinct()->orderBy('product_type')->pluck('product_type'),

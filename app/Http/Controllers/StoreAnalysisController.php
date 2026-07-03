@@ -16,7 +16,7 @@ class StoreAnalysisController extends Controller
         $this->authorize('create', StoreAnalysis::class);
         $this->authorize('view', $store);
 
-        if (app()->environment('local') || config('queue.default') === 'sync') {
+        if (! config('services.store_analysis.via_queue', false) || app()->environment('local') || config('queue.default') === 'sync') {
             $this->extendExecutionLimit();
             $result = $analysis->analyze($store, $request->user());
 

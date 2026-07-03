@@ -21,6 +21,7 @@ import {
     Sparkles,
     Target,
     TriangleAlert,
+    XCircle,
 } from 'lucide-vue-next';
 
 const props = defineProps({
@@ -116,6 +117,63 @@ const sourceCards = computed(() => {
         ['Collections', `${snapshot.collections?.with_descriptions ?? 0}/${snapshot.collections?.total ?? 0}`, 'AEO category copy', BookOpen],
         ['Blogs', snapshot.blogs?.published_portal ?? 0, 'Published portal blogs', Lightbulb],
         ['Answer pages', snapshot.pages?.answer_pages ?? 0, 'FAQ, policy, trust pages', CheckCircle2],
+    ];
+});
+const platformReadiness = computed(() => {
+    if (!report.value) return [];
+
+    const snapshot = report.value.source_snapshot ?? {};
+    const products = snapshot.products ?? {};
+    const collections = snapshot.collections ?? {};
+    const pages = snapshot.pages ?? {};
+    const blogs = snapshot.blogs ?? {};
+
+    const productCoverage = (products.with_descriptions ?? 0) >= Math.max(3, Math.ceil((products.total ?? 0) * 0.4));
+    const collectionCoverage = (collections.with_descriptions ?? 0) >= Math.max(1, Math.ceil((collections.total ?? 0) * 0.35));
+    const answerPagesReady = (pages.answer_pages ?? 0) >= 2;
+    const blogCoverage = (blogs.with_faqs ?? 0) >= 1 || (blogs.published_portal ?? 0) >= 2;
+    const promptCoverageReady = (report.value.prompt_coverage_score ?? 0) >= 60;
+    const brandReady = (brandPresence.value.score ?? 0) >= 60;
+    const technicalReady = (report.value.schema_readiness_score ?? 0) >= 60;
+    const sourceDepthReady = (report.value.content_depth_score ?? 0) >= 60;
+
+    return [
+        {
+            name: 'ChatGPT',
+            ready: promptCoverageReady && answerPagesReady && brandReady,
+            checks: [
+                { label: 'Answer-page coverage', passed: answerPagesReady },
+                { label: 'Brand clarity', passed: brandReady },
+                { label: 'Prompt coverage', passed: promptCoverageReady },
+            ],
+        },
+        {
+            name: 'Gemini',
+            ready: technicalReady && sourceDepthReady && collectionCoverage,
+            checks: [
+                { label: 'Technical readiness', passed: technicalReady },
+                { label: 'Collection source depth', passed: collectionCoverage },
+                { label: 'Content depth', passed: sourceDepthReady },
+            ],
+        },
+        {
+            name: 'Perplexity',
+            ready: blogCoverage && answerPagesReady && promptCoverageReady,
+            checks: [
+                { label: 'Citable blog content', passed: blogCoverage },
+                { label: 'Policy / trust pages', passed: answerPagesReady },
+                { label: 'Prompt coverage', passed: promptCoverageReady },
+            ],
+        },
+        {
+            name: 'Claude',
+            ready: brandReady && productCoverage && sourceDepthReady,
+            checks: [
+                { label: 'Brand trust signals', passed: brandReady },
+                { label: 'Product detail coverage', passed: productCoverage },
+                { label: 'Source depth', passed: sourceDepthReady },
+            ],
+        },
     ];
 });
 
@@ -369,6 +427,32 @@ const trendPoints = (key) => {
                                 <component :is="Icon" class="size-5" />
                             </div>
                         </div>
+                    </div>
+                </section>
+
+                <section class="panel">
+                    <div class="panel-header">
+                        <div>
+                            <h2 class="text-sm font-bold text-zinc-950">Platform readiness</h2>
+                            <p class="text-xs text-zinc-500">A quick pass on whether current store content meets the baseline signals these AI platforms tend to rely on.</p>
+                        </div>
+                    </div>
+                    <div class="grid gap-3 p-4 md:grid-cols-2 xl:grid-cols-4">
+                        <article v-for="platform in platformReadiness" :key="platform.name" class="rounded-lg border border-zinc-200 p-4">
+                            <div class="flex items-center justify-between gap-3">
+                                <h3 class="text-sm font-bold text-zinc-950">{{ platform.name }}</h3>
+                                <span class="rounded-full px-2 py-1 text-xs font-bold" :class="platform.ready ? 'bg-emerald-100 text-emerald-800' : 'bg-rose-100 text-rose-800'">
+                                    {{ platform.ready ? 'Ready' : 'Needs work' }}
+                                </span>
+                            </div>
+                            <div class="mt-4 space-y-2">
+                                <div v-for="check in platform.checks" :key="check.label" class="flex items-center gap-2 text-sm">
+                                    <CheckCircle2 v-if="check.passed" class="size-4 shrink-0 text-emerald-600" />
+                                    <XCircle v-else class="size-4 shrink-0 text-rose-600" />
+                                    <span class="text-zinc-700">{{ check.label }}</span>
+                                </div>
+                            </div>
+                        </article>
                     </div>
                 </section>
 
