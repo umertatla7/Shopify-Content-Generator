@@ -80,6 +80,10 @@ return [
         'via_queue' => env('STORE_ANALYSIS_VIA_QUEUE', false),
     ],
 
+    'blog_publishing' => [
+        'via_queue' => env('BLOG_PUBLISHING_VIA_QUEUE', false),
+    ],
+
     'pagespeed' => [
         'enabled' => env('PAGESPEED_INSIGHTS_ENABLED', true),
         'api_key' => env('PAGESPEED_INSIGHTS_API_KEY'),

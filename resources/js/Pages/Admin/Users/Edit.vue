@@ -7,6 +7,9 @@ const props = defineProps({
     managedUser: Object,
     accounts: Array,
     roles: Array,
+    accountRoles: Array,
+    permissions: Array,
+    memberships: Array,
 });
 
 const form = useForm({
@@ -14,6 +17,14 @@ const form = useForm({
     email: props.managedUser.email,
     global_role: props.managedUser.global_role,
     current_account_id: props.managedUser.current_account_id ?? '',
+    memberships: props.memberships.map((membership) => ({
+        id: membership.id,
+        account_id: membership.account_id,
+        account_name: membership.account?.name ?? 'Unknown account',
+        role_id: membership.role_id ?? '',
+        status: membership.status,
+        permissions: membership.permissions ?? [],
+    })),
 });
 
 const save = () => form.patch(`/admin/users/${props.managedUser.id}`);
@@ -63,14 +74,47 @@ const save = () => form.patch(`/admin/users/${props.managedUser.id}`);
 
             <section class="panel">
                 <div class="panel-header">
-                    <h2 class="text-sm font-bold text-zinc-950">Memberships</h2>
+                    <h2 class="text-sm font-bold text-zinc-950">Memberships and access</h2>
                 </div>
-                <div class="panel-body space-y-3">
-                    <div v-for="account in props.managedUser.accounts" :key="account.id" class="rounded-md border border-zinc-200 p-3">
-                        <div class="font-semibold text-zinc-950">{{ account.name }}</div>
-                        <div class="text-xs text-zinc-500">Account ID {{ account.id }}</div>
+                <div class="panel-body space-y-4">
+                    <div v-for="membership in form.memberships" :key="membership.id" class="rounded-md border border-zinc-200 p-4">
+                        <div class="mb-4">
+                            <div class="font-semibold text-zinc-950">{{ membership.account_name }}</div>
+                            <div class="text-xs text-zinc-500">Membership ID {{ membership.id }}</div>
+                        </div>
+
+                        <div class="grid gap-4 md:grid-cols-2">
+                            <div>
+                                <label>Account role</label>
+                                <select v-model="membership.role_id">
+                                    <option value="">No role</option>
+                                    <option v-for="role in props.accountRoles" :key="role.id" :value="role.id">{{ role.label }}</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label>Status</label>
+                                <select v-model="membership.status">
+                                    <option value="invited">Invited</option>
+                                    <option value="active">Active</option>
+                                    <option value="suspended">Suspended</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <div class="mt-4">
+                            <label>Direct permissions</label>
+                            <div class="mt-2 grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
+                                <label v-for="permission in props.permissions" :key="permission.id" class="flex items-start gap-2 rounded-md border border-zinc-200 p-2 text-sm font-normal text-zinc-700">
+                                    <input v-model="membership.permissions" :value="permission.name" type="checkbox" class="mt-0.5 size-4 rounded border-zinc-300 p-0" />
+                                    <span>
+                                        <span class="block font-medium text-zinc-950">{{ permission.label }}</span>
+                                        <span class="text-xs text-zinc-500">{{ permission.name }}</span>
+                                    </span>
+                                </label>
+                            </div>
+                        </div>
                     </div>
-                    <p v-if="!props.managedUser.accounts.length" class="text-sm text-zinc-500">No account memberships.</p>
+                    <p v-if="!form.memberships.length" class="text-sm text-zinc-500">No account memberships.</p>
                 </div>
             </section>
         </div>

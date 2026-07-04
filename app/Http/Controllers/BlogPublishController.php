@@ -22,7 +22,8 @@ class BlogPublishController extends Controller
             return back()->withErrors(['publish' => 'Add and save blog body content before publishing to Shopify.']);
         }
 
-        if (app()->environment('local') || config('queue.default') === 'sync') {
+        if (! $this->shouldQueuePublishing()) {
+            $this->extendExecutionLimit();
             $published = $publisher->publish($blog->loadMissing('store.credential'), $request->user());
 
             return back()->with('status', $published->status === Blog::STATUS_PUBLISHED
@@ -64,7 +65,8 @@ class BlogPublishController extends Controller
                 continue;
             }
 
-            if (app()->environment('local') || config('queue.default') === 'sync') {
+            if (! $this->shouldQueuePublishing()) {
+                $this->extendExecutionLimit();
                 app(BlogPublishingService::class)->publish($blog->loadMissing('store.credential'), $request->user());
             } else {
                 PublishBlogJob::dispatch($blog->id, $request->user()->id);
@@ -73,7 +75,9 @@ class BlogPublishController extends Controller
             $published++;
         }
 
-        $message = "{$published} selected blogs sent for publishing.";
+        $message = ! $this->shouldQueuePublishing()
+            ? "{$published} selected blogs published."
+            : "{$published} selected blogs sent for publishing.";
 
         if ($skipped) {
             $message .= " {$skipped} skipped because they are not approved.";
@@ -100,13 +104,30 @@ class BlogPublishController extends Controller
                 continue;
             }
 
-            if (app()->environment('local') || config('queue.default') === 'sync') {
+            if (! $this->shouldQueuePublishing()) {
+                $this->extendExecutionLimit();
                 app(BlogPublishingService::class)->publish($blog->loadMissing('store.credential'), $request->user());
             } else {
                 PublishBlogJob::dispatch($blog->id, $request->user()->id);
             }
         }
 
-        return back()->with('status', $blogs->count().' approved blogs sent for publishing.');
+        return back()->with('status', ! $this->shouldQueuePublishing()
+            ? $blogs->count().' approved blogs published.'
+            : $blogs->count().' approved blogs sent for publishing.');
+    }
+
+    private function shouldQueuePublishing(): bool
+    {
+        return config('services.blog_publishing.via_queue', false)
+            && ! app()->environment('local')
+            && config('queue.default') !== 'sync';
+    }
+
+    private function extendExecutionLimit(int $seconds = 120): void
+    {
+        if (function_exists('set_time_limit')) {
+            @set_time_limit($seconds);
+        }
     }
 }

@@ -34,3 +34,4 @@ Artisan::command('app:import-sqlite {path} {--fresh}', function (string $path) {
 })->purpose('Import application data from a SQLite file into the default MySQL database');
 
 Schedule::job(new PublishScheduledBlogsJob)->everyMinute();
+Schedule::command('app:prune-logs --days=90')->daily();

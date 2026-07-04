@@ -17,6 +17,7 @@ import {
     Users,
     Building2,
     CreditCard,
+    DollarSign,
     LockKeyhole,
 } from 'lucide-vue-next';
 
@@ -69,22 +70,28 @@ const customerItems = computed(() => [
 ]);
 
 const adminItems = [
-    { href: '/admin/dashboard', label: 'Admin', icon: BarChart3, show: true },
-    { href: '/admin/users', label: 'Users', icon: Users, show: true },
+    { href: '/admin/dashboard', label: 'Overview', icon: BarChart3, show: true },
     { href: '/admin/accounts', label: 'Accounts', icon: Building2, show: true },
+    { href: '/admin/stores', label: 'Stores', icon: ShoppingBag, show: true },
+    { href: '/admin/users', label: 'Users', icon: Users, show: true },
+    { href: '/admin/activity', label: 'Activity Logs', icon: Activity, show: true },
+    { href: '/admin/dashboard?focus=costs', label: 'AI Cost', icon: DollarSign, show: true },
     { href: '/admin/plans', label: 'Plans', icon: Package, show: true },
     { href: '/admin/settings', label: 'Settings', icon: Settings, show: true },
-    { href: '/admin/stores', label: 'Stores', icon: ShoppingBag, show: true },
     { href: '/admin/topics', label: 'Topics', icon: Lightbulb, show: true },
     { href: '/admin/blogs', label: 'Blogs', icon: FileText, show: true },
-    { href: '/admin/activity', label: 'Activity', icon: Activity, show: true },
 ];
 
 const items = computed(() => (isAdmin.value ? adminItems : customerItems.value));
 
 const isActive = (href) => {
     const path = window.location.pathname + window.location.search;
-    return href === '/dashboard' ? window.location.pathname === href : path.startsWith(href.split('?')[0]);
+
+    if (href.includes('?')) {
+        return path === href;
+    }
+
+    return href === '/dashboard' ? window.location.pathname === href : path.startsWith(href);
 };
 
 const logout = () => router.delete('/logout');

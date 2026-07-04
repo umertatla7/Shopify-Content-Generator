@@ -77,6 +77,7 @@ Route::middleware('auth')->group(function (): void {
         Route::get('/settings', [AdminSettingsController::class, 'index'])->name('settings.index');
         Route::post('/settings', [AdminSettingsController::class, 'update'])->name('settings.update');
         Route::get('/stores', [AdminStoreController::class, 'index'])->name('stores.index');
+        Route::get('/stores/{store}', [AdminStoreController::class, 'show'])->name('stores.show');
         Route::get('/topics', [AdminTopicController::class, 'index'])->name('topics.index');
         Route::get('/blogs', [AdminBlogController::class, 'index'])->name('blogs.index');
         Route::get('/activity', [AdminActivityController::class, 'index'])->name('activity.index');

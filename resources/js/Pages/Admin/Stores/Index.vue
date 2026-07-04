@@ -1,6 +1,6 @@
 <script setup>
 import { reactive } from 'vue';
-import { Head, router } from '@inertiajs/vue3';
+import { Head, Link, router } from '@inertiajs/vue3';
 import AppLayout from '@/Layouts/AppLayout.vue';
 
 const props = defineProps({
@@ -41,16 +41,18 @@ const apply = () => router.get('/admin/stores', filters, { preserveState: true, 
         <section class="panel">
             <div class="table-wrap">
                 <table class="data-table">
-                    <thead><tr><th>Store</th><th>Account</th><th>Status</th><th>Products</th><th>Collections</th><th>Blogs</th><th>Last Sync</th></tr></thead>
+                    <thead><tr><th>Store</th><th>Account</th><th>Plan</th><th>Status</th><th>Products</th><th>Collections</th><th>Blogs</th><th>Last Sync</th><th>Actions</th></tr></thead>
                     <tbody>
                         <tr v-for="store in props.stores.data" :key="store.id">
                             <td>{{ store.name }}<div class="text-xs text-zinc-500">{{ store.shop_domain }}</div></td>
                             <td>{{ store.account?.name }}</td>
+                            <td>{{ store.account?.plan_key ?? '-' }}</td>
                             <td><span class="badge" :class="`badge-${store.status}`">{{ store.status }}</span></td>
                             <td>{{ store.products_count }}</td>
                             <td>{{ store.collections_count }}</td>
                             <td>{{ store.blogs_count }}</td>
                             <td>{{ store.last_synced_at ? new Date(store.last_synced_at).toLocaleString() : '-' }}</td>
+                            <td><Link class="btn btn-secondary" :href="`/admin/stores/${store.id}`">Open</Link></td>
                         </tr>
                     </tbody>
                 </table>

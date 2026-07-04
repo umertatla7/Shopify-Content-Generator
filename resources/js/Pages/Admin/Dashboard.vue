@@ -203,7 +203,7 @@ const titleCase = (value) => String(value || '').replaceAll('_', ' ');
                         <thead><tr><th>Store</th><th>Customer</th><th>Tokens</th><th>Cost</th></tr></thead>
                         <tbody>
                             <tr v-for="row in props.storeCosts" :key="row.id">
-                                <td class="font-semibold text-zinc-950">{{ row.name }}</td>
+                                <td><Link :href="`/admin/stores/${row.id}`" class="font-semibold text-zinc-950 hover:text-teal-700">{{ row.name }}</Link></td>
                                 <td>{{ row.account }}</td>
                                 <td>{{ number(row.total_tokens) }}</td>
                                 <td>{{ money(row.estimated_cost) }}</td>
