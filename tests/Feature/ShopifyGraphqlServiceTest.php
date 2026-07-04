@@ -6,6 +6,7 @@ use App\Models\Account;
 use App\Models\Blog;
 use App\Models\ShopifyStore;
 use App\Services\Shopify\ShopifyService;
+use App\Services\Shopify\ShopifySyncService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Str;
@@ -210,6 +211,77 @@ class ShopifyGraphqlServiceTest extends TestCase
                 && Str::contains($request->data()['query'] ?? '', 'GetArticle')
                 && ($request->data()['variables']['id'] ?? null) === 'gid://shopify/Article/200';
         });
+    }
+
+    public function test_portal_blog_sync_resets_missing_published_blogs(): void
+    {
+        $store = $this->storeWithCredential([
+            'admin_api_access_token' => 'shpat_test_token',
+        ]);
+
+        $matched = Blog::query()->create([
+            'account_id' => $store->account_id,
+            'shopify_store_id' => $store->id,
+            'title' => 'Matched Blog',
+            'body' => '<p>Published body.</p>',
+            'shopify_article_id' => 'gid://shopify/Article/200',
+            'status' => Blog::STATUS_PUBLISHED,
+        ]);
+
+        $missing = Blog::query()->create([
+            'account_id' => $store->account_id,
+            'shopify_store_id' => $store->id,
+            'title' => 'Missing Blog',
+            'body' => '<p>Should still be publishable.</p>',
+            'shopify_article_id' => 'gid://shopify/Article/404',
+            'status' => Blog::STATUS_PUBLISHED,
+            'published_url' => 'https://acme.myshopify.com/blogs/news/missing-blog',
+            'published_at' => now(),
+        ]);
+
+        Http::fake([
+            'https://acme.myshopify.com/admin/api/2026-04/graphql.json' => Http::response([
+                'data' => [
+                    'articles' => [
+                        'nodes' => [[
+                            'id' => 'gid://shopify/Article/200',
+                            'title' => 'Matched Blog',
+                            'handle' => 'matched-blog',
+                            'body' => '<p>Published body.</p>',
+                            'summary' => 'Summary',
+                            'tags' => ['seo'],
+                            'isPublished' => true,
+                            'publishedAt' => '2026-06-11T00:00:00Z',
+                            'createdAt' => '2026-06-11T00:00:00Z',
+                            'updatedAt' => '2026-06-11T00:00:00Z',
+                            'author' => ['name' => 'Author'],
+                            'blog' => [
+                                'id' => 'gid://shopify/Blog/100',
+                                'title' => 'News',
+                                'handle' => 'news',
+                            ],
+                        ]],
+                        'pageInfo' => [
+                            'hasNextPage' => false,
+                            'endCursor' => null,
+                        ],
+                    ],
+                ],
+            ]),
+        ]);
+
+        $summary = app(ShopifySyncService::class)->syncPortalBlogs($store->fresh('credential'));
+
+        $matched->refresh();
+        $missing->refresh();
+
+        $this->assertSame(['shopify_articles' => 1, 'matched' => 1, 'missing' => 1], $summary);
+        $this->assertSame(Blog::STATUS_PUBLISHED, $matched->status);
+        $this->assertSame('https://acme.myshopify.com/blogs/news/matched-blog', $matched->published_url);
+        $this->assertSame(Blog::STATUS_APPROVED, $missing->status);
+        $this->assertNull($missing->shopify_article_id);
+        $this->assertNull($missing->published_url);
+        $this->assertNotNull($missing->failure_message);
     }
 
     private function storeWithCredential(array $credential): ShopifyStore

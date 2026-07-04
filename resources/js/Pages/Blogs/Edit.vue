@@ -35,6 +35,19 @@ const props = defineProps({
     blog: Object,
 });
 
+const inferWordTarget = (value) => {
+    const matches = String(value || '').match(/\d[\d,]*/g) ?? [];
+    const numbers = matches
+        .map((item) => Number(String(item).replaceAll(',', '')))
+        .filter((item) => Number.isFinite(item) && item > 0);
+
+    if (!numbers.length) {
+        return 1200;
+    }
+
+    return Math.max(300, Math.min(1500, numbers[numbers.length - 1]));
+};
+
 const editor = ref(null);
 const secondaryKeywordsText = ref((props.blog.secondary_keywords ?? []).join('\n'));
 const faqText = ref(JSON.stringify(props.blog.faq ?? [], null, 2));
@@ -57,6 +70,7 @@ const form = useForm({
     faq: props.blog.faq ?? [],
     internal_links: props.blog.internal_links ?? [],
     product_links: props.blog.product_links ?? [],
+    target_word_count: props.blog.payload?.target_word_count ?? inferWordTarget(props.blog.topic?.estimated_article_size),
     status: props.blog.status ?? 'draft',
 });
 
@@ -284,6 +298,7 @@ const generateFullBody = async () => {
             primary_keyword: form.primary_keyword,
             secondary_keywords: form.secondary_keywords,
             tone: confirmedTone.value,
+            target_word_count: form.target_word_count,
         }, { headers: { Accept: 'application/json' } });
 
         const payload = response.data;
@@ -447,6 +462,16 @@ const createImageBrief = () => router.post(`/blogs/${props.blog.id}/image`, {}, 
                         <div class="flex flex-wrap items-center gap-2">
                             <div class="rounded-md bg-zinc-100 px-3 py-2 text-xs font-semibold text-zinc-600">
                                 {{ bodyWordCount.toLocaleString() }} words · {{ readingMinutes }} min read
+                            </div>
+                            <div class="flex min-w-44 items-center gap-2">
+                                <label class="shrink-0 text-xs font-semibold uppercase text-zinc-500">Words</label>
+                                <select v-model="form.target_word_count" class="h-9 py-1 text-sm" title="Choose target word count">
+                                    <option :value="600">600</option>
+                                    <option :value="800">800</option>
+                                    <option :value="1000">1000</option>
+                                    <option :value="1200">1200</option>
+                                    <option :value="1500">1500</option>
+                                </select>
                             </div>
                             <div class="flex min-w-52 items-center gap-2">
                                 <label class="shrink-0 text-xs font-semibold uppercase text-zinc-500">Tone</label>

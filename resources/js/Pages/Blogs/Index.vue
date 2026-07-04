@@ -25,6 +25,9 @@ const applyFilters = () => router.get('/blogs', filters, { preserveState: true, 
 const approve = (blog) => router.post(`/blogs/${blog.id}/approve`, {}, { preserveScroll: true });
 const publish = (blog) => router.post(`/blogs/${blog.id}/publish`, {}, { preserveScroll: true });
 const syncFromShopify = (blog) => router.post(`/blogs/${blog.id}/sync-shopify`, {}, { preserveScroll: true });
+const syncCatalog = () => router.post('/blogs/sync-shopify', {
+    store_id: filters.store || null,
+}, { preserveScroll: true });
 const canPublish = (blog) => ['approved', 'scheduled', 'published'].includes(blog.status);
 const formatStoreTime = (value, blog) => {
     if (!value) return '-';
@@ -55,6 +58,7 @@ const publishApproved = () => router.post('/blogs/publish-approved', {}, { prese
             <div class="panel-header">
                 <h2 class="text-sm font-bold text-zinc-950">Filters</h2>
                 <div class="flex flex-wrap gap-2">
+                    <button class="btn btn-secondary" @click="syncCatalog"><RefreshCw class="size-4" />Sync Shopify</button>
                     <button class="btn btn-secondary" :disabled="!selected.length" @click="publishSelected"><Send class="size-4" />Selected</button>
                     <button class="btn btn-primary" @click="publishApproved"><Send class="size-4" />Approved</button>
                 </div>

@@ -3,6 +3,7 @@
 namespace App\Services\Shopify;
 
 use App\Models\ExistingShopifyBlog;
+use App\Models\Blog;
 use App\Models\Product;
 use App\Models\ShopifyCollection;
 use App\Models\ShopifyPage;
@@ -229,55 +230,71 @@ GRAPHQL);
 
     public function syncExistingBlogs(ShopifyStore $store): int
     {
-        $articles = $this->shopify->paginate($store, 'articles', <<<'GRAPHQL'
-query SyncArticles($first: Int!, $after: String) {
-  articles(first: $first, after: $after) {
-    nodes {
-      id
-      title
-      handle
-      body
-      summary
-      tags
-      publishedAt
-      createdAt
-      updatedAt
-      author { name }
-      blog { id title handle }
+        return $this->syncExistingBlogsFromArticles($store, $this->fetchArticles($store));
     }
-    pageInfo { hasNextPage endCursor }
-  }
-}
-GRAPHQL);
 
-        $count = 0;
+    public function syncPortalBlogs(ShopifyStore $store): array
+    {
+        $articles = $this->fetchArticles($store);
+        $shopifyArticleCount = $this->syncExistingBlogsFromArticles($store, $articles);
+        $articlesById = collect($articles)
+            ->filter(fn (array $article) => filled($article['id'] ?? null))
+            ->keyBy('id');
 
-        foreach ($articles as $article) {
-            ExistingShopifyBlog::query()->updateOrCreate(
-                [
-                    'shopify_store_id' => $store->id,
-                    'shopify_article_id' => $article['id'] ?? null,
-                ],
-                [
-                    'account_id' => $store->account_id,
-                    'shopify_blog_id' => Arr::get($article, 'blog.id'),
-                    'title' => $article['title'] ?? 'Untitled article',
-                    'handle' => $article['handle'] ?? null,
-                    'url' => $this->shopify->articleUrl($store, $article),
-                    'body' => $article['body'] ?? null,
-                    'excerpt' => $article['summary'] ?? null,
-                    'author' => Arr::get($article, 'author.name'),
-                    'tags' => $article['tags'] ?? [],
-                    'published_at' => $article['publishedAt'] ?? null,
-                    'last_synced_at' => now(),
-                    'payload' => $article,
-                ]
-            );
+        $matched = 0;
+        $missing = 0;
 
-            $count++;
-        }
+        Blog::query()
+            ->forAccount($store->account_id)
+            ->where('shopify_store_id', $store->id)
+            ->where(function ($query): void {
+                $query->whereNotNull('shopify_article_id')
+                    ->orWhere('status', Blog::STATUS_PUBLISHED);
+            })
+            ->get()
+            ->each(function (Blog $blog) use ($articlesById, $store, &$matched, &$missing): void {
+                $article = $articlesById->get($blog->shopify_article_id);
 
-        return $count;
+                if ($article) {
+                    $matched++;
+
+                    $isPublished = (bool) ($article['isPublished'] ?? false);
+
+                    $blog->update([
+                        'shopify_blog_id' => Arr::get($article, 'blog.id') ?? $blog->shopify_blog_id,
+                        'shopify_article_id' => $article['id'] ?? $blog->shopify_article_id,
+                        'published_url' => $isPublished ? $this->shopify->articleUrl($store, $article) : null,
+                        'published_at' => $isPublished ? ($article['publishedAt'] ?? $blog->published_at) : null,
+                        'status' => $isPublished
+                            ? Blog::STATUS_PUBLISHED
+                            : ($blog->hasPublishableBody() ? Blog::STATUS_APPROVED : Blog::STATUS_DRAFT),
+                        'failure_message' => null,
+                    ]);
+
+                    return;
+                }
+
+                if (! $blog->shopify_article_id && $blog->status !== Blog::STATUS_PUBLISHED) {
+                    return;
+                }
+
+                $missing++;
+
+                $blog->update([
+                    'shopify_blog_id' => null,
+                    'shopify_article_id' => null,
+                    'published_url' => null,
+                    'published_at' => null,
+                    'status' => $blog->hasPublishableBody() ? Blog::STATUS_APPROVED : Blog::STATUS_DRAFT,
+                    'failure_message' => 'Shopify sync could not find this article. Publish it again if you want it live.',
+                ]);
+            });
+
+        return [
+            'shopify_articles' => $shopifyArticleCount,
+            'matched' => $matched,
+            'missing' => $missing,
+        ];
     }
 
     public function syncPages(ShopifyStore $store): int
@@ -323,6 +340,78 @@ GRAPHQL);
             );
 
             $count++;
+        }
+
+        return $count;
+    }
+
+    private function fetchArticles(ShopifyStore $store): array
+    {
+        return $this->shopify->paginate($store, 'articles', <<<'GRAPHQL'
+query SyncArticles($first: Int!, $after: String) {
+  articles(first: $first, after: $after) {
+    nodes {
+      id
+      title
+      handle
+      body
+      summary
+      tags
+      isPublished
+      publishedAt
+      createdAt
+      updatedAt
+      author { name }
+      blog { id title handle }
+    }
+    pageInfo { hasNextPage endCursor }
+  }
+}
+GRAPHQL);
+    }
+
+    private function syncExistingBlogsFromArticles(ShopifyStore $store, array $articles): int
+    {
+        $count = 0;
+        $syncedArticleIds = [];
+
+        foreach ($articles as $article) {
+            if ($article['id'] ?? null) {
+                $syncedArticleIds[] = $article['id'];
+            }
+
+            ExistingShopifyBlog::query()->updateOrCreate(
+                [
+                    'shopify_store_id' => $store->id,
+                    'shopify_article_id' => $article['id'] ?? null,
+                ],
+                [
+                    'account_id' => $store->account_id,
+                    'shopify_blog_id' => Arr::get($article, 'blog.id'),
+                    'title' => $article['title'] ?? 'Untitled article',
+                    'handle' => $article['handle'] ?? null,
+                    'url' => $this->shopify->articleUrl($store, $article),
+                    'body' => $article['body'] ?? null,
+                    'excerpt' => $article['summary'] ?? null,
+                    'author' => Arr::get($article, 'author.name'),
+                    'tags' => $article['tags'] ?? [],
+                    'published_at' => $article['publishedAt'] ?? null,
+                    'last_synced_at' => now(),
+                    'payload' => $article,
+                ]
+            );
+
+            $count++;
+        }
+
+        $staleArticles = ExistingShopifyBlog::query()
+            ->where('shopify_store_id', $store->id)
+            ->whereNotNull('shopify_article_id');
+
+        if ($syncedArticleIds === []) {
+            $staleArticles->delete();
+        } else {
+            $staleArticles->whereNotIn('shopify_article_id', $syncedArticleIds)->delete();
         }
 
         return $count;

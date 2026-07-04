@@ -27,9 +27,18 @@ class BlogBodyGenerationController extends Controller
             'primary_keyword' => ['sometimes', 'nullable', 'string', 'max:255'],
             'secondary_keywords' => ['sometimes', 'nullable', 'array'],
             'tone' => ['sometimes', 'nullable', 'string', 'max:255'],
+            'target_word_count' => ['sometimes', 'nullable', 'integer', 'min:300', 'max:1500'],
         ]);
 
         $blogUpdates = collect($validated)->except('tone')->all();
+
+        if (array_key_exists('target_word_count', $validated)) {
+            $blogUpdates['payload'] = [
+                ...($blog->payload ?? []),
+                'target_word_count' => $validated['target_word_count'],
+            ];
+            unset($blogUpdates['target_word_count']);
+        }
 
         if ($blogUpdates !== []) {
             $blog->update($blogUpdates);
@@ -38,6 +47,7 @@ class BlogBodyGenerationController extends Controller
         try {
             $generatedBlog = $blogs->generateBody($blog, $request->user(), [
                 'tone' => $validated['tone'] ?? null,
+                'target_word_count' => $validated['target_word_count'] ?? null,
             ]);
         } catch (Throwable $exception) {
             if ($request->expectsJson()) {

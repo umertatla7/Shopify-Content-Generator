@@ -128,6 +128,7 @@ Route::middleware('auth')->group(function (): void {
     Route::post('/topics/generate-selected-blogs', [BlogTopicController::class, 'generateSelectedBlogs'])->name('topics.generate-selected-blogs');
 
     Route::get('/blogs', [BlogController::class, 'index'])->name('blogs.index');
+    Route::post('/blogs/sync-shopify', [BlogController::class, 'syncCatalog'])->name('blogs.sync-catalog');
     Route::get('/blogs/{blog}/edit', [BlogController::class, 'edit'])->name('blogs.edit');
     Route::patch('/blogs/{blog}', [BlogController::class, 'update'])->name('blogs.update');
     Route::post('/blogs/{blog}/sync-shopify', [BlogController::class, 'syncFromShopify'])->name('blogs.sync-shopify');

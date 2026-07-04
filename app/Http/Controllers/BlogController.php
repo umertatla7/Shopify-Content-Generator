@@ -7,6 +7,7 @@ use App\Models\BlogComment;
 use App\Models\ShopifyStore;
 use App\Services\BlogGenerationService;
 use App\Services\SEOScoringService;
+use App\Services\Shopify\ShopifySyncService;
 use App\Services\Shopify\ShopifyService;
 use App\Support\PlanFeatureGate;
 use Illuminate\Http\RedirectResponse;
@@ -14,6 +15,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Arr;
 use Inertia\Inertia;
 use Inertia\Response;
+use Throwable;
 
 class BlogController extends Controller
 {
@@ -96,9 +98,18 @@ class BlogController extends Controller
             'faq' => ['nullable', 'array'],
             'internal_links' => ['nullable', 'array'],
             'product_links' => ['nullable', 'array'],
+            'target_word_count' => ['nullable', 'integer', 'min:300', 'max:1500'],
             'status' => ['nullable', 'in:draft,needs_review,approved,scheduled,published,failed,rejected'],
             'assigned_to' => ['nullable', 'integer', 'exists:users,id'],
         ]);
+
+        if (array_key_exists('target_word_count', $validated)) {
+            $validated['payload'] = [
+                ...($blog->payload ?? []),
+                'target_word_count' => $validated['target_word_count'],
+            ];
+            unset($validated['target_word_count']);
+        }
 
         $validated += $seo->score([...$blog->toArray(), ...$validated]);
 
@@ -146,6 +157,60 @@ class BlogController extends Controller
         $revisions->snapshot($blog->refresh(), $request->user(), 'Synced from Shopify article');
 
         return back()->with('status', 'Blog synced from Shopify.');
+    }
+
+    public function syncCatalog(Request $request, ShopifySyncService $sync): RedirectResponse
+    {
+        $this->authorize('viewAny', Blog::class);
+        abort_unless(PlanFeatureGate::moduleAccess($request->user()->currentAccount)['blogs'], 403);
+
+        $validated = $request->validate([
+            'store_id' => ['nullable', 'integer'],
+        ]);
+
+        $accountId = $request->user()->current_account_id;
+
+        $stores = ShopifyStore::query()
+            ->forAccount($accountId)
+            ->whereHas('credential')
+            ->when($validated['store_id'] ?? null, fn ($query, $storeId) => $query->whereKey($storeId))
+            ->get();
+
+        if ($stores->isEmpty()) {
+            return back()->withErrors(['sync' => 'No Shopify-connected store is available for blog sync.']);
+        }
+
+        $summaries = [
+            'stores' => 0,
+            'shopify_articles' => 0,
+            'matched' => 0,
+            'missing' => 0,
+        ];
+        $errors = [];
+
+        foreach ($stores as $store) {
+            try {
+                $result = $sync->syncPortalBlogs($store->loadMissing('credential'));
+                $summaries['stores']++;
+                $summaries['shopify_articles'] += (int) ($result['shopify_articles'] ?? 0);
+                $summaries['matched'] += (int) ($result['matched'] ?? 0);
+                $summaries['missing'] += (int) ($result['missing'] ?? 0);
+            } catch (Throwable $exception) {
+                $errors[] = "{$store->name}: {$exception->getMessage()}";
+            }
+        }
+
+        if ($summaries['stores'] === 0 && $errors !== []) {
+            return back()->withErrors(['sync' => implode(' ', $errors)]);
+        }
+
+        $message = "Shopify blog sync checked {$summaries['stores']} store(s), found {$summaries['shopify_articles']} Shopify article(s), matched {$summaries['matched']} portal blog(s), and reset {$summaries['missing']} missing blog(s).";
+
+        if ($errors !== []) {
+            $message .= ' Some stores could not be synced: '.implode(' | ', $errors);
+        }
+
+        return back()->with('status', $message);
     }
 
     public function comment(Request $request, Blog $blog): RedirectResponse

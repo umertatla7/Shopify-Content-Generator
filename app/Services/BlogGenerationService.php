@@ -172,7 +172,8 @@ class BlogGenerationService
 
         $blog->loadMissing(['store.knowledgeBase', 'topic']);
         $prompt = $this->bodyPrompt($blog, $options);
-        $estimatedCredits = $this->credits->wordsToCredits($this->estimatedWords($blog->topic?->estimated_article_size));
+        $targetWordCount = $this->targetWordCount($blog, $options);
+        $estimatedCredits = $this->credits->wordsToCredits($targetWordCount);
 
         $this->credits->ensure($blog->account_id, $estimatedCredits, 'full blog body generation');
 
@@ -208,7 +209,7 @@ class BlogGenerationService
         ]);
 
         try {
-            $estimatedSize = $blog->topic?->estimated_article_size ?? '1,000-1,500 words';
+            $estimatedSize = "{$targetWordCount} words";
             $result = $this->ai->generate($prompt, [
                 'type' => 'blog_body_generation',
                 'title' => $blog->title,
@@ -259,6 +260,7 @@ class BlogGenerationService
                 'shopify_store_id' => $blog->shopify_store_id,
                 'generated_words' => $wordCount,
                 'estimated_article_size' => $estimatedSize,
+                'target_word_count' => $targetWordCount,
             ]);
         } catch (Throwable $exception) {
             $blog->update([
@@ -325,7 +327,9 @@ class BlogGenerationService
     {
         $store = $blog->store;
         $knowledgeBase = $store->knowledgeBase;
-        $estimatedSize = $blog->topic?->estimated_article_size ?? '1,000-1,500 words';
+        $estimatedSize = ($options['target_word_count'] ?? null)
+            ? ((int) $options['target_word_count']).' words'
+            : ($blog->topic?->estimated_article_size ?? '1,000-1,500 words');
         $confirmedTone = $options['tone'] ?? $blog->topic?->tone ?? $store->brand_tone ?? 'Professional';
 
         return 'Write the complete long-form body for this Shopify SEO blog. Return valid JSON only with keys: body, faq, internal_links, product_links, featured_image_idea, seo_score, readability_score. The body must be HTML with one H1, multiple H2/H3 sections, useful paragraphs, natural product/collection references, and enough depth to match the estimated article size. If the estimated article size says 1000 words, write at least about 1000 words. Match the confirmed blog tone exactly. Do not return a short placeholder, outline, or summary. '.
@@ -365,6 +369,17 @@ class BlogGenerationService
             ->values();
 
         return max(300, (int) ($numbers->max() ?: 1200));
+    }
+
+    private function targetWordCount(Blog $blog, array $options): int
+    {
+        $requested = (int) ($options['target_word_count'] ?? ($blog->payload['target_word_count'] ?? 0));
+
+        if ($requested > 0) {
+            return max(300, min(1500, $requested));
+        }
+
+        return min(1500, $this->estimatedWords($blog->topic?->estimated_article_size));
     }
 
     private function productContext($store, int $limit): array
