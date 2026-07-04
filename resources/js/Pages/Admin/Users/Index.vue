@@ -18,13 +18,16 @@ const apply = () => router.get('/admin/users', filters, { preserveState: true, p
 </script>
 
 <template>
-    <Head title="Admin Users" />
+    <Head title="Internal Team" />
     <AppLayout>
-        <template #title>Users</template>
+        <template #title>Team</template>
 
         <section class="panel mb-6">
             <div class="panel-header">
-                <h2 class="text-sm font-bold text-zinc-950">User Directory</h2>
+                <div>
+                    <h2 class="text-sm font-bold text-zinc-950">Internal team</h2>
+                    <p class="text-sm text-zinc-500">Customer members are managed inside each customer workspace. This page is only for platform admins and managers.</p>
+                </div>
             </div>
             <div class="panel-body grid gap-3 md:grid-cols-3">
                 <div>
@@ -35,7 +38,6 @@ const apply = () => router.get('/admin/users', filters, { preserveState: true, p
                     <label>Global role</label>
                     <select v-model="filters.role" @change="apply">
                         <option value="">All</option>
-                        <option value="user">User</option>
                         <option value="manager">Manager</option>
                         <option value="super_admin">Super Admin</option>
                     </select>
@@ -49,7 +51,7 @@ const apply = () => router.get('/admin/users', filters, { preserveState: true, p
         <section class="panel">
             <div class="table-wrap">
                 <table class="data-table">
-                    <thead><tr><th>Name</th><th>Email</th><th>Current Account</th><th>Accounts</th><th>Role</th><th>Joined</th><th>Actions</th></tr></thead>
+                    <thead><tr><th>Name</th><th>Email</th><th>Current Account</th><th>Customer Accounts</th><th>Role</th><th>Joined</th><th>Actions</th></tr></thead>
                     <tbody>
                         <tr v-for="user in props.users.data" :key="user.id">
                             <td class="font-semibold text-zinc-950">{{ user.name }}</td>

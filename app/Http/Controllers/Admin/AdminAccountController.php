@@ -10,9 +10,11 @@ use App\Models\Role;
 use App\Models\ShopifyStore;
 use App\Models\UsageLog;
 use App\Models\User;
+use App\Services\AICostService;
 use App\Services\Shopify\ShopifyService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
@@ -31,7 +33,10 @@ class AdminAccountController extends Controller
         return Inertia::render('Admin/Accounts/Index', [
             'filters' => $filters,
             'accounts' => Account::query()
-                ->with('owner:id,name,email')
+                ->with([
+                    'owner:id,name,email',
+                    'stores:id,account_id,name,shop_domain,shop_url,status,last_synced_at',
+                ])
                 ->withCount(['users', 'stores', 'blogs', 'topics', 'aiGenerations'])
                 ->when($filters['search'] ?? null, fn ($query, $search) => $query->where(function ($query) use ($search): void {
                     $query->where('name', 'like', "%{$search}%")
@@ -142,14 +147,33 @@ class AdminAccountController extends Controller
         return redirect()->route('admin.accounts.show', $account)->with('status', 'Customer account created.');
     }
 
-    public function show(Request $request, Account $account): Response
+    public function show(Request $request, Account $account, AICostService $costs): Response
     {
         abort_unless($request->user()->isPlatformAdmin(), 403);
 
+        $account->load([
+            'owner:id,name,email',
+            'users:id,name,email,global_role',
+        ])->loadCount(['users', 'stores', 'blogs', 'topics', 'aiGenerations']);
+
+        $stores = $account->stores()
+            ->with(['credential:id,shopify_store_id,expires_at,scopes,created_at,updated_at'])
+            ->withCount(['products', 'collections', 'blogs', 'pages', 'existingBlogs', 'visibilityReports'])
+            ->latest()
+            ->get();
+
+        $generations = $account->aiGenerations()
+            ->with(['user:id,name,email'])
+            ->latest()
+            ->get(['id', 'account_id', 'shopify_store_id', 'user_id', 'provider', 'model', 'type', 'status', 'token_usage', 'cost', 'created_at']);
+
+        $monthlyGenerations = $generations->filter(fn ($generation) => $generation->created_at?->gte(now()->startOfMonth()));
+        $creditUsageQuery = $account->usageLogs()->where('type', 'credit_usage');
+
         return Inertia::render('Admin/Accounts/Show', [
-            'account' => $account->load(['owner:id,name,email', 'users:id,name,email,global_role']),
+            'account' => $account,
             'plans' => Plan::query()->where('is_active', true)->orderBy('name')->get(),
-            'stores' => $account->stores()->with(['credential:id,shopify_store_id,expires_at,scopes,created_at,updated_at'])->withCount(['products', 'collections', 'blogs'])->latest()->get(),
+            'stores' => $stores,
             'blogs' => $account->blogs()->with('store:id,name')->latest()->limit(20)->get(),
             'activity' => $account->activityLogs()->with(['user:id,name,email', 'store:id,name'])->latest()->limit(20)->get(),
             'creditUsage' => $account->usageLogs()
@@ -157,6 +181,49 @@ class AdminAccountController extends Controller
                 ->latest()
                 ->limit(20)
                 ->get(['id', 'type', 'quantity', 'unit', 'metadata', 'created_at']),
+            'aiCostSummary' => [
+                'all_time' => $this->summarizeGenerations($generations, $costs),
+                'current_month' => $this->summarizeGenerations($monthlyGenerations, $costs),
+            ],
+            'creditsUsedSummary' => [
+                'all_time' => (int) (clone $creditUsageQuery)->sum('quantity'),
+                'current_month' => (int) (clone $creditUsageQuery)->where('created_at', '>=', now()->startOfMonth())->sum('quantity'),
+            ],
+            'recentFailures' => [
+                'sync' => $stores->map(function (ShopifyStore $store): ?array {
+                    $failedSync = $store->syncLogs()->where('status', 'failed')->latest()->first(['id', 'status', 'error_message', 'created_at']);
+
+                    if (! $failedSync) {
+                        return null;
+                    }
+
+                    return [
+                        'id' => $failedSync->id,
+                        'store_id' => $store->id,
+                        'store_name' => $store->name,
+                        'shop_domain' => $store->shop_domain,
+                        'status' => $failedSync->status,
+                        'error_message' => $failedSync->error_message,
+                        'created_at' => $failedSync->created_at,
+                    ];
+                })->filter()->values(),
+                'analysis' => $stores->flatMap(function (ShopifyStore $store) {
+                    return $store->analyses()
+                        ->where('status', 'failed')
+                        ->latest()
+                        ->limit(3)
+                        ->get(['id', 'shopify_store_id', 'status', 'error_message', 'created_at'])
+                        ->map(fn ($analysis) => [
+                            'id' => $analysis->id,
+                            'store_id' => $store->id,
+                            'store_name' => $store->name,
+                            'shop_domain' => $store->shop_domain,
+                            'status' => $analysis->status,
+                            'error_message' => $analysis->error_message,
+                            'created_at' => $analysis->created_at,
+                        ]);
+                })->take(10)->values(),
+            ],
         ]);
     }
 
@@ -426,6 +493,29 @@ class AdminAccountController extends Controller
             'new_values' => $new,
             'ip_address' => $request->ip(),
             'user_agent' => $request->userAgent(),
+        ]);
+    }
+
+    private function summarizeGenerations(Collection $generations, AICostService $costs): array
+    {
+        return $generations->reduce(function (array $carry, $generation) use ($costs): array {
+            $tokens = $costs->tokens($generation->token_usage ?? []);
+
+            return [
+                'generations' => $carry['generations'] + 1,
+                'input_tokens' => $carry['input_tokens'] + $tokens['input'],
+                'cached_input_tokens' => $carry['cached_input_tokens'] + $tokens['cached_input'],
+                'output_tokens' => $carry['output_tokens'] + $tokens['output'],
+                'total_tokens' => $carry['total_tokens'] + $tokens['total'],
+                'estimated_cost' => round($carry['estimated_cost'] + $costs->costForGeneration($generation), 4),
+            ];
+        }, [
+            'generations' => 0,
+            'input_tokens' => 0,
+            'cached_input_tokens' => 0,
+            'output_tokens' => 0,
+            'total_tokens' => 0,
+            'estimated_cost' => 0.0,
         ]);
     }
 }

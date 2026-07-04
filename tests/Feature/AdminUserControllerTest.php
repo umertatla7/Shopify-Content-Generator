@@ -8,6 +8,7 @@ use App\Models\Permission;
 use App\Models\Role;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Inertia\Testing\AssertableInertia as Assert;
 use Tests\TestCase;
 
 class AdminUserControllerTest extends TestCase
@@ -79,5 +80,22 @@ class AdminUserControllerTest extends TestCase
         $this->assertSame('active', $membership->status);
         $this->assertSame(['topics.manage', 'blogs.publish'], $membership->permissions);
         $this->assertNotNull($membership->accepted_at);
+    }
+
+    public function test_internal_team_index_only_shows_platform_staff(): void
+    {
+        $admin = User::factory()->create(['global_role' => 'super_admin']);
+        $manager = User::factory()->create(['global_role' => 'manager', 'name' => 'Manager User']);
+        User::factory()->create(['global_role' => 'user', 'name' => 'Customer User']);
+
+        $this->actingAs($admin)
+            ->get('/admin/users')
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page
+                ->component('Admin/Users/Index')
+                ->has('users.data', 2)
+            )
+            ->assertSee($manager->name)
+            ->assertDontSee('Customer User');
     }
 }

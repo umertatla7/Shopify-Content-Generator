@@ -71,9 +71,8 @@ const customerItems = computed(() => [
 
 const adminItems = [
     { href: '/admin/dashboard', label: 'Overview', icon: BarChart3, show: true },
-    { href: '/admin/accounts', label: 'Accounts', icon: Building2, show: true },
-    { href: '/admin/stores', label: 'Stores', icon: ShoppingBag, show: true },
-    { href: '/admin/users', label: 'Users', icon: Users, show: true },
+    { href: '/admin/accounts', label: 'Customers', icon: Building2, show: true },
+    { href: '/admin/users', label: 'Team', icon: Users, show: true },
     { href: '/admin/activity', label: 'Activity Logs', icon: Activity, show: true },
     { href: '/admin/dashboard?focus=costs', label: 'AI Cost', icon: DollarSign, show: true },
     { href: '/admin/plans', label: 'Plans', icon: Package, show: true },

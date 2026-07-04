@@ -27,6 +27,7 @@ class AdminUserController extends Controller
             'users' => User::query()
                 ->with('currentAccount:id,name')
                 ->withCount('accounts')
+                ->whereIn('global_role', ['manager', 'super_admin'])
                 ->when($filters['search'] ?? null, fn ($query, $search) => $query->where(function ($query) use ($search): void {
                     $query->where('name', 'like', "%{$search}%")
                         ->orWhere('email', 'like', "%{$search}%");
