@@ -48,7 +48,11 @@ const syncStore = () => {
                                 <Sparkles class="size-6" />
                             </div>
                             <div>
-                                <h2 class="text-xl font-bold text-zinc-950">Your Shopify workspace is ready</h2>
+                                <div class="inline-flex items-center gap-2 rounded-full bg-teal-50 px-3 py-1 text-xs font-semibold text-teal-800">
+                                    <BadgeCheck class="size-4" />
+                                    Shopify install completed
+                                </div>
+                                <h2 class="mt-3 text-xl font-bold text-zinc-950">Your Shopify workspace is ready</h2>
                                 <p class="mt-1 text-sm text-zinc-600">
                                     We connected your store. The next step is syncing store data, then choosing the package that fits the amount of content, audit depth, and visibility tracking you want to unlock.
                                 </p>
@@ -74,7 +78,7 @@ const syncStore = () => {
                         </div>
                     </div>
 
-                    <div class="rounded-md border border-zinc-200 bg-zinc-50 p-4">
+                    <div class="rounded-2xl border border-zinc-200 bg-zinc-50 p-4">
                         <div class="text-sm font-bold text-zinc-950">Setup checklist</div>
                         <div class="mt-4 space-y-3 text-sm">
                             <div class="flex items-center justify-between gap-3 rounded-md border border-zinc-200 bg-white p-3">

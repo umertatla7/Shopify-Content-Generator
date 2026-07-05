@@ -2,6 +2,7 @@
 import { computed, ref } from 'vue';
 import { Head, router } from '@inertiajs/vue3';
 import AppLayout from '@/Layouts/AppLayout.vue';
+import PlaceholderImage from '@/Components/PlaceholderImage.vue';
 import {
     BookOpen,
     Bot,
@@ -120,10 +121,10 @@ const sourceCards = computed(() => {
     ];
 });
 const platformDefinitions = [
-    { key: 'chatgpt', name: 'ChatGPT', iconText: 'GPT', iconClass: 'border-emerald-200 bg-emerald-50 text-emerald-700' },
-    { key: 'claude', name: 'Claude', iconText: 'CL', iconClass: 'border-amber-200 bg-amber-50 text-amber-700' },
-    { key: 'gemini', name: 'Gemini', iconText: 'GM', iconClass: 'border-violet-200 bg-violet-50 text-violet-700' },
-    { key: 'perplexity', name: 'Perplexity', iconText: 'PX', iconClass: 'border-sky-200 bg-sky-50 text-sky-700' },
+    { key: 'chatgpt', name: 'ChatGPT', imageName: 'chatgpt.png', imageSrc: '/images/platforms/chatgpt.png', iconClass: 'border-emerald-200 bg-emerald-50 text-emerald-700', fallbackLabel: 'CG' },
+    { key: 'claude', name: 'Claude', imageName: 'claude.png', imageSrc: '/images/platforms/claude.png', iconClass: 'border-amber-200 bg-amber-50 text-amber-700', fallbackLabel: 'CL' },
+    { key: 'gemini', name: 'Gemini', imageName: 'gemini.png', imageSrc: '/images/platforms/gemini.png', iconClass: 'border-violet-200 bg-violet-50 text-violet-700', fallbackLabel: 'GM' },
+    { key: 'perplexity', name: 'Perplexity', imageName: 'perplexity.png', imageSrc: '/images/platforms/perplexity.png', iconClass: 'border-sky-200 bg-sky-50 text-sky-700', fallbackLabel: 'PX' },
 ];
 const platformReadiness = computed(() => {
     if (!report.value) return [];
@@ -497,9 +498,13 @@ const trendPoints = (key) => {
                         <article v-for="platform in platformReadiness" :key="platform.name" class="rounded-lg border border-zinc-200 p-4">
                             <div class="flex items-center justify-between gap-3">
                                 <div class="flex items-center gap-3">
-                                    <div class="grid h-10 w-10 place-items-center rounded-xl border text-[11px] font-black tracking-wide" :class="platform.iconClass">
-                                        {{ platform.iconText }}
-                                    </div>
+                                    <PlaceholderImage
+                                        :src="platform.imageSrc"
+                                        :alt="platform.imageName"
+                                        :fallback-label="platform.fallbackLabel"
+                                        :wrapper-class="`grid h-10 w-10 place-items-center rounded-xl border ${platform.iconClass}`"
+                                        image-class="h-5 w-5 object-contain"
+                                    />
                                     <h3 class="text-sm font-bold text-zinc-950">{{ platform.name }}</h3>
                                 </div>
                                 <span class="rounded-full px-2 py-1 text-xs font-bold" :class="platform.ready ? 'bg-emerald-100 text-emerald-800' : 'bg-rose-100 text-rose-800'">
@@ -558,9 +563,13 @@ const trendPoints = (key) => {
                                     <th>Prompt</th>
                                     <th v-for="platform in platformDefinitions" :key="platform.key" class="text-center">
                                         <div class="flex items-center justify-center gap-2">
-                                            <div class="grid h-7 w-7 place-items-center rounded-lg border text-[10px] font-black tracking-wide" :class="platform.iconClass">
-                                                {{ platform.iconText }}
-                                            </div>
+                                            <PlaceholderImage
+                                                :src="platform.imageSrc"
+                                                :alt="platform.imageName"
+                                                :fallback-label="platform.fallbackLabel"
+                                                :wrapper-class="`grid h-7 w-7 place-items-center rounded-lg border ${platform.iconClass}`"
+                                                image-class="h-4 w-4 object-contain"
+                                            />
                                             <span>{{ platform.name }}</span>
                                         </div>
                                     </th>

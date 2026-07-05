@@ -22,6 +22,7 @@ const pageTitle = computed(() => isAuditMode.value ? 'Store Audit' : 'Store');
 const pageDescription = computed(() => isAuditMode.value
     ? 'Review store audit reports, performance, SEO findings, and content gaps for the connected store.'
     : 'Manage the connected Shopify store, run syncs, and keep catalog data up to date before using the SEO tools.');
+const primaryStore = computed(() => props.stores?.[0] ?? null);
 
 const showConnectForm = ref(false);
 
@@ -238,6 +239,70 @@ const formatBytes = (bytes) => {
                     </Link>
                 </div>
             </div>
+
+            <section class="panel overflow-hidden">
+                <div class="grid gap-4 p-4 lg:grid-cols-[1.2fr_.8fr]">
+                    <div class="space-y-4">
+                        <div class="inline-flex items-center gap-2 rounded-full bg-teal-50 px-3 py-1 text-xs font-semibold text-teal-800">
+                            <Gauge class="size-4" />
+                            {{ isAuditMode ? 'Audit-ready store view' : 'Store control center' }}
+                        </div>
+                        <div>
+                            <h3 class="text-lg font-bold text-zinc-950">{{ primaryStore?.name ?? 'No connected store yet' }}</h3>
+                            <p class="mt-1 text-sm leading-6 text-zinc-600">
+                                {{ isAuditMode
+                                    ? 'Run a focused store audit, review PageSpeed and technical findings, then turn those gaps into publishable content work.'
+                                    : 'Keep the catalog synced before generating product descriptions, collection copy, topics, and blogs.' }}
+                            </p>
+                        </div>
+                        <div class="grid gap-3 sm:grid-cols-4">
+                            <div class="rounded-xl border border-zinc-200 p-3">
+                                <div class="text-[11px] font-semibold uppercase tracking-wide text-zinc-400">Products</div>
+                                <div class="mt-2 text-xl font-bold text-zinc-950">{{ primaryStore?.products_count ?? 0 }}</div>
+                            </div>
+                            <div class="rounded-xl border border-zinc-200 p-3">
+                                <div class="text-[11px] font-semibold uppercase tracking-wide text-zinc-400">Collections</div>
+                                <div class="mt-2 text-xl font-bold text-zinc-950">{{ primaryStore?.collections_count ?? 0 }}</div>
+                            </div>
+                            <div class="rounded-xl border border-zinc-200 p-3">
+                                <div class="text-[11px] font-semibold uppercase tracking-wide text-zinc-400">Pages</div>
+                                <div class="mt-2 text-xl font-bold text-zinc-950">{{ primaryStore?.pages_count ?? 0 }}</div>
+                            </div>
+                            <div class="rounded-xl border border-zinc-200 p-3">
+                                <div class="text-[11px] font-semibold uppercase tracking-wide text-zinc-400">Blogs</div>
+                                <div class="mt-2 text-xl font-bold text-zinc-950">{{ primaryStore?.blogs_count ?? 0 }}</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="rounded-2xl border border-zinc-200 bg-zinc-50 p-4">
+                        <div class="text-sm font-bold text-zinc-950">Next best action</div>
+                        <div class="mt-3 rounded-xl border border-zinc-200 bg-white p-4">
+                            <div class="text-sm font-semibold text-zinc-950">
+                                {{ isAuditMode ? 'Run or refresh the audit' : 'Sync the latest store data' }}
+                            </div>
+                            <p class="mt-1 text-sm text-zinc-500">
+                                {{ isAuditMode
+                                    ? 'Keep the audit current before showing scores and recommendations in a demo.'
+                                    : 'Make sure recently added products, collections, and blogs are available to the content tools.' }}
+                            </p>
+                            <div class="mt-4 flex flex-wrap gap-2">
+                                <button v-if="primaryStore && isAuditMode" class="btn btn-primary" type="button" @click="analyze(primaryStore)">
+                                    <Brain class="size-4" />
+                                    Run audit
+                                </button>
+                                <button v-if="primaryStore && !isAuditMode" class="btn btn-primary" type="button" @click="sync(primaryStore)">
+                                    <RefreshCw class="size-4" />
+                                    Sync now
+                                </button>
+                                <Link v-if="primaryStore && !isAuditMode" class="btn btn-secondary" :href="`/stores/${primaryStore.id}/knowledge-base`">
+                                    Knowledge base
+                                </Link>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
 
             <section v-if="showConnectForm" class="panel max-w-2xl">
                 <div class="panel-header">

@@ -2,7 +2,7 @@
 import { computed } from 'vue';
 import { Head, router, usePage } from '@inertiajs/vue3';
 import AppLayout from '@/Layouts/AppLayout.vue';
-import { BadgeCheck, CheckCircle2, CreditCard, ExternalLink, RefreshCw, ShieldCheck, Store } from 'lucide-vue-next';
+import { BadgeCheck, CheckCircle2, CreditCard, ExternalLink, RefreshCw, ShieldCheck, Sparkles, Store } from 'lucide-vue-next';
 
 const props = defineProps({
     plans: Array,
@@ -50,13 +50,17 @@ const cancelSubscription = () => {
                 <div class="grid gap-4 p-4 lg:grid-cols-[1.35fr_1fr]">
                     <div class="space-y-3">
                         <div class="flex items-start gap-3">
-                            <div class="grid size-11 shrink-0 place-items-center rounded-md bg-teal-50 text-teal-700">
+                            <div class="grid size-11 shrink-0 place-items-center rounded-xl bg-teal-50 text-teal-700">
                                 <CreditCard class="size-5" />
                             </div>
                             <div>
-                                <h2 class="text-lg font-bold text-zinc-950">Public-app billing foundation</h2>
+                                <div class="inline-flex items-center gap-2 rounded-full bg-teal-50 px-3 py-1 text-xs font-semibold text-teal-800">
+                                    <Sparkles class="size-4" />
+                                    Shopify-managed billing
+                                </div>
+                                <h2 class="mt-3 text-lg font-bold text-zinc-950">Plans, trials, and subscription control</h2>
                                 <p class="mt-1 text-sm text-zinc-600">
-                                    This account is wired for Shopify-managed subscription approval, so plan changes and free-trial starts can move through Shopify billing instead of manual back-office changes.
+                                    Merchants should be able to choose a plan, start a trial, upgrade, downgrade, and cancel inside Shopify without needing support.
                                 </p>
                             </div>
                         </div>
@@ -85,7 +89,7 @@ const cancelSubscription = () => {
                         </div>
                     </div>
 
-                    <div class="rounded-lg border border-zinc-200 bg-zinc-50 p-4">
+                    <div class="rounded-2xl border border-zinc-200 bg-zinc-50 p-4">
                         <div class="flex items-center justify-between gap-3">
                             <div>
                                 <h3 class="text-sm font-bold text-zinc-950">Readiness checks</h3>
@@ -156,6 +160,9 @@ const cancelSubscription = () => {
                             <div>
                                 <div class="text-lg font-bold text-zinc-950">{{ plan.name }}</div>
                                 <div class="mt-1 text-sm text-zinc-500">{{ formatPrice(plan) }}</div>
+                                <div v-if="trialLabel(plan)" class="mt-2 inline-flex rounded-full bg-teal-50 px-2 py-1 text-xs font-semibold text-teal-800">
+                                    {{ trialLabel(plan) }}
+                                </div>
                             </div>
                             <span v-if="plan.key === props.currentPlanKey" class="badge bg-teal-100 text-teal-800">
                                 <BadgeCheck class="mr-1 size-3.5" />
@@ -198,10 +205,6 @@ const cancelSubscription = () => {
                                 <span>Image alt text</span>
                                 <span class="font-semibold text-zinc-950">{{ limitLabel(plan.monthly_image_alt_text_limit) }}</span>
                             </div>
-                        </div>
-
-                        <div v-if="trialLabel(plan)" class="rounded-md bg-teal-50 px-3 py-2 text-xs font-semibold text-teal-800">
-                            Includes {{ trialLabel(plan) }}
                         </div>
 
                         <div class="rounded-md bg-zinc-50 p-3 text-sm text-zinc-600">
