@@ -27,7 +27,10 @@ class CollectionController extends Controller
             'search' => ['nullable', 'string', 'max:255'],
             'store' => ['nullable', 'integer'],
             'status' => ['nullable', 'in:any,missing_description,generated,pushed,failed'],
+            'per_page' => ['nullable', 'integer', 'in:10,15,25,50,100'],
         ]);
+
+        $perPage = (int) ($filters['per_page'] ?? 15);
 
         $query = ShopifyCollection::query()
             ->forAccount($accountId)
@@ -48,7 +51,7 @@ class CollectionController extends Controller
             ->when(($filters['status'] ?? null) === 'failed', fn ($query) => $query->where('generation_status', 'failed'));
 
         return Inertia::render('Collections/Index', [
-            'collections' => $query->latest('last_synced_at')->paginate(15)->withQueryString(),
+            'collections' => $query->latest('last_synced_at')->paginate($perPage)->withQueryString(),
             'filters' => $filters,
             'credits' => $credits->summary($request->user()->currentAccount),
             'collectionCreditCosts' => [

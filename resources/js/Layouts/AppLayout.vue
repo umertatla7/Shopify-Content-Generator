@@ -1,5 +1,5 @@
 <script setup>
-import { computed } from 'vue';
+import { computed, onMounted, ref, watch } from 'vue';
 import { Link, router, usePage } from '@inertiajs/vue3';
 import {
     Activity,
@@ -19,6 +19,8 @@ import {
     CreditCard,
     DollarSign,
     LockKeyhole,
+    PanelLeftClose,
+    PanelLeftOpen,
 } from 'lucide-vue-next';
 
 const page = usePage();
@@ -27,6 +29,8 @@ const permissions = computed(() => auth.value.permissions ?? {});
 const planAccess = computed(() => auth.value.plan_access ?? auth.value.account?.plan_access ?? {});
 const isAdmin = computed(() => Boolean(auth.value.user?.is_platform_admin));
 const shopify = computed(() => page.props.shopify ?? {});
+const sidebarCollapsed = ref(false);
+const showAuthActions = computed(() => isAdmin.value || !shopify.value.embedded);
 const primaryStoreName = computed(() => auth.value.account?.stores?.[0]?.name ?? auth.value.account?.name ?? 'Shopify workspace');
 const planLabel = computed(() => {
     const key = auth.value.account?.plan_key;
@@ -55,6 +59,22 @@ const withShopifyContext = (href) => {
 
     return href.includes('?') ? `${href}&${contextQuery.value}` : `${href}?${contextQuery.value}`;
 };
+
+onMounted(() => {
+    if (typeof window === 'undefined') {
+        return;
+    }
+
+    sidebarCollapsed.value = window.localStorage.getItem('gsh-sidebar-collapsed') === '1';
+});
+
+watch(sidebarCollapsed, (value) => {
+    if (typeof window === 'undefined') {
+        return;
+    }
+
+    window.localStorage.setItem('gsh-sidebar-collapsed', value ? '1' : '0');
+});
 
 const customerItems = computed(() => [
     { href: '/dashboard', label: 'Dashboard', section: 'Overview', icon: BarChart3, show: true, locked: false },
@@ -115,33 +135,41 @@ const logout = () => router.delete('/logout');
 
 <template>
     <div class="min-h-screen bg-zinc-50">
-        <aside class="fixed inset-y-0 left-0 hidden w-64 border-r border-zinc-200 bg-white lg:block">
-            <div class="flex h-16 items-center gap-3 border-b border-zinc-200 px-4">
+        <aside class="fixed inset-y-0 left-0 hidden border-r border-zinc-200 bg-white lg:flex lg:flex-col" :class="sidebarCollapsed ? 'w-20' : 'w-64'">
+            <div class="flex h-16 items-center gap-3 border-b border-zinc-200 px-4" :class="sidebarCollapsed ? 'justify-center' : ''">
                 <div class="grid size-11 place-items-center rounded-xl border border-zinc-200 bg-zinc-50">
                     <img :src="brandLogo" alt="SEO & AEO Content Generator" class="h-9 w-9 rounded-lg object-cover object-left" />
                 </div>
-                <div>
+                <div v-if="!sidebarCollapsed">
                     <div class="text-sm font-bold leading-tight text-zinc-950">SEO & AEO Content Generator</div>
                     <div class="text-xs text-zinc-500">{{ isAdmin ? 'Platform admin' : primaryStoreName }}</div>
                 </div>
             </div>
 
-            <div class="border-b border-zinc-100 px-4 py-4">
+            <div class="border-b border-zinc-100 px-4 py-4" :class="sidebarCollapsed ? 'px-2' : ''">
                 <div class="rounded-xl border border-zinc-200 bg-zinc-50 p-3">
-                    <div class="flex items-center justify-between gap-2">
-                        <span class="text-[11px] font-semibold uppercase tracking-wide text-zinc-500">Workspace</span>
+                    <div class="flex items-center justify-between gap-2" :class="sidebarCollapsed ? 'justify-center' : ''">
+                        <span v-if="!sidebarCollapsed" class="text-[11px] font-semibold uppercase tracking-wide text-zinc-500">Workspace</span>
                         <span class="badge bg-white text-zinc-700">{{ isAdmin ? 'Admin' : planLabel }}</span>
                     </div>
-                    <p class="mt-2 text-sm font-semibold text-zinc-950">{{ isAdmin ? 'Internal operations' : primaryStoreName }}</p>
-                    <p class="mt-1 text-xs leading-5 text-zinc-500">
+                    <p v-if="!sidebarCollapsed" class="mt-2 text-sm font-semibold text-zinc-950">{{ isAdmin ? 'Internal operations' : primaryStoreName }}</p>
+                    <p v-if="!sidebarCollapsed" class="mt-1 text-xs leading-5 text-zinc-500">
                         {{ isAdmin ? 'Customer health, pricing, support, and activity controls.' : 'Store content, AI visibility, and publishing in one place.' }}
                     </p>
                 </div>
             </div>
 
-            <nav class="space-y-4 p-3">
+            <div class="flex flex-1 flex-col overflow-hidden">
+                <div class="px-3 pb-2 pt-3">
+                    <button class="editor-tool w-full" type="button" :title="sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'" @click="sidebarCollapsed = !sidebarCollapsed">
+                        <PanelLeftOpen v-if="sidebarCollapsed" class="size-4" />
+                        <PanelLeftClose v-else class="size-4" />
+                    </button>
+                </div>
+
+                <nav class="flex-1 space-y-4 overflow-y-auto px-3 pb-4">
                 <section v-for="group in navGroups" :key="group.label" class="space-y-1">
-                    <div class="px-3 text-[11px] font-semibold uppercase tracking-wide text-zinc-400">
+                    <div v-if="!sidebarCollapsed" class="px-3 text-[11px] font-semibold uppercase tracking-wide text-zinc-400">
                         {{ group.label }}
                     </div>
                     <Link
@@ -149,17 +177,19 @@ const logout = () => router.delete('/logout');
                         :key="item.href"
                         :href="withShopifyContext(item.href)"
                         class="flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition"
+                        :title="sidebarCollapsed ? item.label : undefined"
                         :class="isActive(item.href) ? 'bg-teal-50 text-teal-800 shadow-sm ring-1 ring-teal-100' : (item.locked ? 'text-zinc-500 hover:bg-zinc-100' : 'text-zinc-600 hover:bg-zinc-100 hover:text-zinc-950')"
                     >
                         <component :is="item.icon" class="size-4" />
-                        <span>{{ item.label }}</span>
+                        <span v-if="!sidebarCollapsed">{{ item.label }}</span>
                         <LockKeyhole v-if="item.locked" class="ml-auto size-3.5 text-zinc-400" />
                     </Link>
                 </section>
-            </nav>
+                </nav>
+            </div>
         </aside>
 
-        <div class="lg:pl-64">
+        <div :class="sidebarCollapsed ? 'lg:pl-20' : 'lg:pl-64'">
             <header class="sticky top-0 z-20 border-b border-zinc-200 bg-white/95 backdrop-blur">
                 <div class="flex min-h-16 items-center justify-between gap-4 px-4 lg:px-6">
                     <div>
@@ -172,7 +202,7 @@ const logout = () => router.delete('/logout');
                         </p>
                     </div>
 
-                    <div class="flex items-center gap-2">
+                    <div v-if="showAuthActions" class="flex items-center gap-2">
                         <Link :href="withShopifyContext(isAdmin ? '/admin/settings' : '/billing')" class="btn btn-secondary">
                             <Settings class="size-4" />
                             <span class="hidden sm:inline">Settings</span>

@@ -2,6 +2,7 @@
 import { computed, ref } from 'vue';
 import { Head, Link, router } from '@inertiajs/vue3';
 import AppLayout from '@/Layouts/AppLayout.vue';
+import TablePagination from '@/Components/TablePagination.vue';
 import { Coins, ExternalLink, LoaderCircle, RefreshCw, Search, Sparkles, UploadCloud, X } from 'lucide-vue-next';
 
 const props = defineProps({
@@ -38,11 +39,12 @@ const filters = ref({
     search: props.filters.search ?? '',
     store: props.filters.store ?? '',
     status: props.filters.status ?? '',
+    per_page: Number(props.filters.per_page ?? props.collections.per_page ?? 15),
 });
 
 const applyFilters = () => router.get('/collections', filters.value, { preserveState: true, preserveScroll: true });
 const resetFilters = () => {
-    filters.value = { search: '', store: '', status: '' };
+    filters.value = { search: '', store: '', status: '', per_page: 15 };
     router.get('/collections', {}, { preserveState: true, preserveScroll: true });
 };
 
@@ -221,6 +223,15 @@ const pushContent = async () => {
         pushingContent.value = false;
     }
 };
+
+const changePage = (page) => {
+    router.get('/collections', { ...filters.value, page }, { preserveState: true, preserveScroll: true });
+};
+
+const changePerPage = (perPage) => {
+    filters.value.per_page = perPage;
+    router.get('/collections', { ...filters.value, page: 1 }, { preserveState: true, preserveScroll: true });
+};
 </script>
 
 <template>
@@ -292,6 +303,16 @@ const pushContent = async () => {
                             <option value="failed">Failed</option>
                         </select>
                     </div>
+                    <div>
+                        <label>Rows</label>
+                        <select v-model="filters.per_page">
+                            <option :value="10">10</option>
+                            <option :value="15">15</option>
+                            <option :value="25">25</option>
+                            <option :value="50">50</option>
+                            <option :value="100">100</option>
+                        </select>
+                    </div>
                     <div class="flex items-end gap-2">
                         <button class="btn btn-primary" type="button" @click="applyFilters">Apply</button>
                         <button class="btn btn-secondary" type="button" @click="resetFilters">Reset</button>
@@ -329,6 +350,9 @@ const pushContent = async () => {
                                             {{ collection.title }}
                                         </button>
                                         <div class="mt-1 text-xs text-zinc-500">{{ collection.handle || 'No handle' }}</div>
+                                        <div class="mt-2">
+                                            <span class="badge" :class="badgeClass(collection)">{{ descriptionStatus(collection) }}</span>
+                                        </div>
                                     </div>
                                 </div>
                             </td>
@@ -364,19 +388,18 @@ const pushContent = async () => {
                 </table>
             </div>
 
-            <div v-if="props.collections.links?.length > 3" class="flex flex-wrap gap-2 border-t border-zinc-200 p-4">
-                <Link
-                    v-for="link in props.collections.links"
-                    :key="link.label"
-                    :href="link.url || '#'"
-                    class="rounded-md border px-3 py-2 text-sm"
-                    :class="[
-                        link.active ? 'border-teal-700 bg-teal-700 text-white' : 'border-zinc-200 text-zinc-700',
-                        !link.url ? 'pointer-events-none opacity-40' : ''
-                    ]"
-                    v-html="link.label"
-                />
-            </div>
+            <TablePagination
+                v-if="(props.collections.total ?? 0) > 0"
+                :current-page="props.collections.current_page"
+                :last-page="props.collections.last_page"
+                :from="props.collections.from ?? 0"
+                :to="props.collections.to ?? 0"
+                :total="props.collections.total ?? 0"
+                :per-page="Number(filters.per_page)"
+                :per-page-options="[10, 15, 25, 50, 100]"
+                @page="changePage"
+                @per-page="changePerPage"
+            />
         </section>
 
         <div v-if="selected" class="fixed inset-0 z-50 grid place-items-center bg-zinc-950/50 p-4" @click.self="selected = null">

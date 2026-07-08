@@ -29,7 +29,10 @@ class ProductController extends Controller
             'status' => ['nullable', 'string', 'max:64'],
             'type' => ['nullable', 'string', 'max:255'],
             'vendor' => ['nullable', 'string', 'max:255'],
+            'per_page' => ['nullable', 'integer', 'in:10,15,25,50,100'],
         ]);
+
+        $perPage = (int) ($filters['per_page'] ?? 15);
 
         $query = Product::query()
             ->forAccount($accountId)
@@ -47,7 +50,7 @@ class ProductController extends Controller
             ->when($filters['vendor'] ?? null, fn ($query, $vendor) => $query->where('vendor', $vendor));
 
         return Inertia::render('Products/Index', [
-            'products' => $query->latest('last_synced_at')->paginate(15)->withQueryString(),
+            'products' => $query->latest('last_synced_at')->paginate($perPage)->withQueryString(),
             'filters' => $filters,
             'credits' => $credits->summary($request->user()->currentAccount),
             'planUsage' => $planLimits->summary($request->user()->currentAccount),

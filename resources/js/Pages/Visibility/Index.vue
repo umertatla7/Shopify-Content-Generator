@@ -1,8 +1,9 @@
 <script setup>
-import { computed, ref } from 'vue';
+import { computed, ref, watch } from 'vue';
 import { Head, router } from '@inertiajs/vue3';
 import AppLayout from '@/Layouts/AppLayout.vue';
 import PlaceholderImage from '@/Components/PlaceholderImage.vue';
+import TablePagination from '@/Components/TablePagination.vue';
 import {
     BookOpen,
     Bot,
@@ -48,11 +49,25 @@ const promptFilters = ref({
     intent: '',
     entity: '',
 });
+const promptPerPage = ref(10);
+const promptPage = ref(1);
+const keywordPerPage = ref(10);
+const keywordPage = ref(1);
 const keywordForm = ref({
     keyword: '',
     shopify_store_id: props.selectedStoreId ?? props.stores?.[0]?.id ?? '',
     target_url: '',
     intent: '',
+});
+
+watch(promptFilters, () => {
+    promptPage.value = 1;
+}, { deep: true });
+
+watch(selectedStoreId, (value) => {
+    keywordForm.value.shopify_store_id = value || '';
+    promptPage.value = 1;
+    keywordPage.value = 1;
 });
 
 const report = computed(() => props.report);
@@ -70,6 +85,10 @@ const filteredPromptChecks = computed(() => promptChecks.value.filter((prompt) =
 
     return true;
 }));
+const paginatedPromptChecks = computed(() => {
+    const start = (promptPage.value - 1) * promptPerPage.value;
+    return filteredPromptChecks.value.slice(start, start + promptPerPage.value);
+});
 const weakestPrompts = computed(() => filteredPromptChecks.value.slice(0, 12));
 const coveredPrompts = computed(() => filteredPromptChecks.value.filter((prompt) => prompt.status === 'covered').length);
 const promptBreakdown = computed(() => ({
@@ -81,6 +100,10 @@ const promptBreakdown = computed(() => ({
 const selectedStore = computed(() => props.stores.find((store) => store.id === Number(selectedStoreId.value)) ?? props.stores?.[0]);
 const comparison = computed(() => props.comparison);
 const trackedKeywords = computed(() => props.trackedKeywords ?? []);
+const paginatedTrackedKeywords = computed(() => {
+    const start = (keywordPage.value - 1) * keywordPerPage.value;
+    return trackedKeywords.value.slice(start, start + keywordPerPage.value);
+});
 const technicalSignals = computed(() => props.technicalSignals ?? []);
 const planMetrics = computed(() => props.planUsage?.metrics ?? {});
 const trackedKeywordMetric = computed(() => planMetrics.value.tracked_keywords ?? null);
@@ -235,6 +258,24 @@ const scoreRingStyle = (score) => {
 
 const changeStore = () => {
     router.get('/ai-visibility', { store_id: selectedStoreId.value }, { preserveState: true, preserveScroll: true });
+};
+
+const changePromptPage = (page) => {
+    promptPage.value = page;
+};
+
+const changePromptPerPage = (perPage) => {
+    promptPerPage.value = perPage;
+    promptPage.value = 1;
+};
+
+const changeKeywordPage = (page) => {
+    keywordPage.value = page;
+};
+
+const changeKeywordPerPage = (perPage) => {
+    keywordPerPage.value = perPage;
+    keywordPage.value = 1;
 };
 
 const generateReport = () => {
@@ -562,7 +603,7 @@ const trendPoints = (key) => {
                                 <tr>
                                     <th>Prompt</th>
                                     <th v-for="platform in platformDefinitions" :key="platform.key" class="text-center">
-                                        <div class="flex items-center justify-center gap-2">
+                                        <div class="flex items-center justify-center" :title="platform.name">
                                             <PlaceholderImage
                                                 :src="platform.imageSrc"
                                                 :alt="platform.imageName"
@@ -570,7 +611,7 @@ const trendPoints = (key) => {
                                                 :wrapper-class="`grid h-7 w-7 place-items-center rounded-lg border ${platform.iconClass}`"
                                                 image-class="h-4 w-4 object-contain"
                                             />
-                                            <span>{{ platform.name }}</span>
+                                            <span class="sr-only">{{ platform.name }}</span>
                                         </div>
                                     </th>
                                     <th>Status</th>
@@ -579,7 +620,7 @@ const trendPoints = (key) => {
                                 </tr>
                             </thead>
                             <tbody class="divide-y divide-zinc-100">
-                                <tr v-for="prompt in filteredPromptChecks" :key="prompt.id">
+                                <tr v-for="prompt in paginatedPromptChecks" :key="prompt.id">
                                     <td class="max-w-md px-4 py-3">
                                         <p class="font-semibold text-zinc-950">{{ prompt.prompt }}</p>
                                         <p class="mt-1 text-xs text-zinc-500">{{ prompt.intent?.replaceAll('_', ' ') }}</p>
@@ -607,6 +648,18 @@ const trendPoints = (key) => {
                             </tbody>
                         </table>
                     </div>
+                    <TablePagination
+                        v-if="filteredPromptChecks.length"
+                        :current-page="promptPage"
+                        :last-page="Math.max(1, Math.ceil(filteredPromptChecks.length / promptPerPage))"
+                        :from="filteredPromptChecks.length ? ((promptPage - 1) * promptPerPage) + 1 : 0"
+                        :to="Math.min(filteredPromptChecks.length, promptPage * promptPerPage)"
+                        :total="filteredPromptChecks.length"
+                        :per-page="promptPerPage"
+                        :per-page-options="[5, 10, 20, 50]"
+                        @page="changePromptPage"
+                        @per-page="changePromptPerPage"
+                    />
                 </section>
 
                 <section class="panel">
@@ -677,7 +730,7 @@ const trendPoints = (key) => {
                         </div>
                     </div>
                     <div class="divide-y divide-zinc-100">
-                        <div v-for="keyword in trackedKeywords" :key="keyword.id" class="grid gap-3 p-4 lg:grid-cols-[1.4fr_.8fr_.8fr_.8fr_auto]">
+                        <div v-for="keyword in paginatedTrackedKeywords" :key="keyword.id" class="grid gap-3 p-4 lg:grid-cols-[1.4fr_.8fr_.8fr_.8fr_auto]">
                             <div>
                                 <p class="text-sm font-semibold text-zinc-950">{{ keyword.keyword }}</p>
                                 <p class="mt-1 text-xs text-zinc-500">{{ keyword.intent || 'No intent set' }}</p>
@@ -708,6 +761,18 @@ const trendPoints = (key) => {
                         </div>
                         <div v-if="!trackedKeywords.length" class="p-4 text-sm text-zinc-500">No tracked keywords added yet.</div>
                     </div>
+                    <TablePagination
+                        v-if="trackedKeywords.length"
+                        :current-page="keywordPage"
+                        :last-page="Math.max(1, Math.ceil(trackedKeywords.length / keywordPerPage))"
+                        :from="trackedKeywords.length ? ((keywordPage - 1) * keywordPerPage) + 1 : 0"
+                        :to="Math.min(trackedKeywords.length, keywordPage * keywordPerPage)"
+                        :total="trackedKeywords.length"
+                        :per-page="keywordPerPage"
+                        :per-page-options="[5, 10, 20, 50]"
+                        @page="changeKeywordPage"
+                        @per-page="changeKeywordPerPage"
+                    />
                 </section>
 
                 <section class="grid gap-5 xl:grid-cols-[.95fr_1.05fr]">

@@ -2,6 +2,7 @@
 import { computed, ref } from 'vue';
 import { Head, Link, router } from '@inertiajs/vue3';
 import AppLayout from '@/Layouts/AppLayout.vue';
+import TablePagination from '@/Components/TablePagination.vue';
 import { Coins, ExternalLink, LoaderCircle, RefreshCw, Search, Sparkles, UploadCloud, X } from 'lucide-vue-next';
 
 const props = defineProps({
@@ -36,11 +37,12 @@ const filters = ref({
     status: props.filters.status ?? '',
     type: props.filters.type ?? '',
     vendor: props.filters.vendor ?? '',
+    per_page: Number(props.filters.per_page ?? props.products.per_page ?? 15),
 });
 
 const applyFilters = () => router.get('/products', filters.value, { preserveState: true, preserveScroll: true });
 const resetFilters = () => {
-    filters.value = { search: '', store: '', status: '', type: '', vendor: '' };
+    filters.value = { search: '', store: '', status: '', type: '', vendor: '', per_page: 15 };
     router.get('/products', {}, { preserveState: true, preserveScroll: true });
 };
 
@@ -71,6 +73,20 @@ const productUrl = (product) => {
 };
 
 const isDraftProduct = (product) => String(product?.status || '').toLowerCase() === 'draft';
+const productContentState = (product) => {
+    if (product.shopify_content_pushed_at) return 'Pushed';
+    if (product.generated_description || product.generated_title) return 'Generated';
+    if (!plainDescription(product.description) || plainDescription(product.description) === 'No description synced from Shopify.') return 'Missing';
+    return 'Synced';
+};
+const contentBadgeClass = (product) => {
+    const status = productContentState(product).toLowerCase();
+
+    if (status === 'pushed') return 'badge-published';
+    if (status === 'generated') return 'badge-generated';
+    if (status === 'missing') return 'badge-rejected';
+    return 'badge-completed';
+};
 const syncProgress = computed(() => {
     const status = props.primaryStore?.latest_sync_log?.status;
 
@@ -185,6 +201,15 @@ const pushContent = async (publish = false) => {
         pushingContent.value = false;
     }
 };
+
+const changePage = (page) => {
+    router.get('/products', { ...filters.value, page }, { preserveState: true, preserveScroll: true });
+};
+
+const changePerPage = (perPage) => {
+    filters.value.per_page = perPage;
+    router.get('/products', { ...filters.value, page: 1 }, { preserveState: true, preserveScroll: true });
+};
 </script>
 
 <template>
@@ -266,6 +291,16 @@ const pushContent = async (publish = false) => {
                             <option v-for="vendor in props.filterOptions.vendors" :key="vendor" :value="vendor">{{ vendor }}</option>
                         </select>
                     </div>
+                    <div>
+                        <label>Rows</label>
+                        <select v-model="filters.per_page">
+                            <option :value="10">10</option>
+                            <option :value="15">15</option>
+                            <option :value="25">25</option>
+                            <option :value="50">50</option>
+                            <option :value="100">100</option>
+                        </select>
+                    </div>
                     <div class="flex items-end gap-2">
                         <button class="btn btn-primary" type="button" @click="applyFilters">Apply</button>
                         <button class="btn btn-secondary" type="button" @click="resetFilters">Reset</button>
@@ -302,6 +337,9 @@ const pushContent = async (publish = false) => {
                                         <button class="two-line-title max-w-64 text-left font-semibold text-zinc-950 hover:text-teal-700" type="button" @click="openProduct(product)">
                                             {{ product.title }}
                                         </button>
+                                        <div class="mt-2 flex flex-wrap gap-2">
+                                            <span class="badge" :class="contentBadgeClass(product)">{{ productContentState(product) }}</span>
+                                        </div>
                                     </div>
                                 </div>
                             </td>
@@ -336,19 +374,18 @@ const pushContent = async (publish = false) => {
                 </table>
             </div>
 
-            <div v-if="props.products.links?.length > 3" class="flex flex-wrap gap-2 border-t border-zinc-200 p-4">
-                <Link
-                    v-for="link in props.products.links"
-                    :key="link.label"
-                    :href="link.url || '#'"
-                    class="rounded-md border px-3 py-2 text-sm"
-                    :class="[
-                        link.active ? 'border-teal-700 bg-teal-700 text-white' : 'border-zinc-200 text-zinc-700',
-                        !link.url ? 'pointer-events-none opacity-40' : ''
-                    ]"
-                    v-html="link.label"
-                />
-            </div>
+            <TablePagination
+                v-if="(props.products.total ?? 0) > 0"
+                :current-page="props.products.current_page"
+                :last-page="props.products.last_page"
+                :from="props.products.from ?? 0"
+                :to="props.products.to ?? 0"
+                :total="props.products.total ?? 0"
+                :per-page="Number(filters.per_page)"
+                :per-page-options="[10, 15, 25, 50, 100]"
+                @page="changePage"
+                @per-page="changePerPage"
+            />
         </section>
 
         <div v-if="selected" class="fixed inset-0 z-50 grid place-items-center bg-zinc-950/50 p-4" @click.self="selected = null">
