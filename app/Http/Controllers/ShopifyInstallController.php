@@ -38,10 +38,21 @@ class ShopifyInstallController extends Controller
                 ->forAccount($user->current_account_id)
                 ->where('shop_domain', $shop)
                 ->first()
-            : ShopifyStore::query()->where('shop_domain', $shop)->first();
+            : null;
+
+        if (! $store) {
+            $store = ShopifyStore::query()->where('shop_domain', $shop)->first();
+        }
 
         if ($store?->credential?->admin_api_access_token && $user?->belongsToAccount($store->account_id)) {
-            return redirect()->to($shopifyContext->decorate(route('dashboard'), $request))
+            $destination = $this->shouldShowOnboarding($store, [
+                'created_user' => false,
+                'created_account' => false,
+            ])
+                ? route('onboarding')
+                : route('dashboard');
+
+            return redirect()->to($shopifyContext->decorate($destination, $request))
                 ->with('status', "{$store->name} is already connected.");
         }
 

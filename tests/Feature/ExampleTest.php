@@ -43,4 +43,21 @@ class ExampleTest extends TestCase
 
         $response->assertRedirect('/shopify/app?shop=acme.myshopify.com&host=encoded-host&embedded=1');
     }
+
+    public function test_unauthenticated_embedded_request_to_protected_route_redirects_to_shopify_app_entrypoint(): void
+    {
+        config()->set('services.shopify.public_app_api_key', 'shopify_key');
+        config()->set('services.shopify.manual_connection_mode', false);
+
+        $response = $this->get('/dashboard?shop=acme.myshopify.com&host=encoded-host&embedded=1');
+
+        $response->assertRedirect('/shopify/app?shop=acme.myshopify.com&host=encoded-host&embedded=1');
+    }
+
+    public function test_unauthenticated_non_shopify_request_to_protected_route_redirects_to_login(): void
+    {
+        $response = $this->get('/dashboard');
+
+        $response->assertRedirect('/login');
+    }
 }

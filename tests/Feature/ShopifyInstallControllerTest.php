@@ -62,6 +62,34 @@ class ShopifyInstallControllerTest extends TestCase
         $response->assertRedirect('/shopify/install/start?shop=umerjewelry.myshopify.com');
     }
 
+    public function test_shopify_app_for_authenticated_user_redirects_to_onboarding_when_store_has_not_been_synced(): void
+    {
+        config()->set('services.shopify.public_app_api_key', 'shopify_key');
+        config()->set('services.shopify.public_app_client_secret', 'shopify_secret');
+        config()->set('services.shopify.public_app_scopes', ['read_products', 'write_products']);
+
+        $owner = $this->memberWithStorePermission();
+
+        ShopifyStore::query()->create([
+            'account_id' => $owner->current_account_id,
+            'connected_by' => $owner->id,
+            'name' => 'Umer Store',
+            'shop_domain' => 'umerjewelry.myshopify.com',
+            'shop_url' => 'https://umerjewelry.myshopify.com',
+            'status' => 'connected',
+        ])->credential()->create([
+            'account_id' => $owner->current_account_id,
+            'admin_api_access_token' => 'token',
+            'api_key' => 'shopify_key',
+            'client_secret' => 'shopify_secret',
+            'scopes' => ['read_products', 'write_products'],
+        ]);
+
+        $response = $this->actingAs($owner)->get('/shopify/app?shop=umerjewelry.myshopify.com');
+
+        $response->assertRedirect('/onboarding?shop=umerjewelry.myshopify.com');
+    }
+
     public function test_shopify_oauth_callback_provisions_user_account_and_connected_store_for_guest(): void
     {
         config()->set('services.shopify.public_app_api_key', 'shopify_key');

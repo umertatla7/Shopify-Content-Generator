@@ -2,7 +2,7 @@
 import { computed } from 'vue';
 import { Head, router, usePage } from '@inertiajs/vue3';
 import AppLayout from '@/Layouts/AppLayout.vue';
-import { BadgeCheck, CheckCircle2, CreditCard, ExternalLink, RefreshCw, ShieldCheck, Sparkles, Store } from 'lucide-vue-next';
+import { BadgeCheck, CheckCircle2, Clock3, CreditCard, ExternalLink, RefreshCw, ShieldCheck, Sparkles, Store } from 'lucide-vue-next';
 
 const props = defineProps({
     plans: Array,
@@ -18,6 +18,7 @@ const visiblePlans = computed(() => props.plans.filter((plan) => Number(plan.mon
 const currentSubscriptionStatus = computed(() => props.currentSubscription?.status ?? 'trial_available');
 const currentPlan = computed(() => props.plans.find((plan) => plan.key === props.currentPlanKey) ?? props.plans[0] ?? null);
 const canCancel = computed(() => ['active', 'trialing', 'pending'].includes(currentSubscriptionStatus.value) && Number(props.currentSubscription?.amount ?? 0) > 0);
+const pendingConfirmationUrl = computed(() => props.currentSubscription?.status === 'pending' ? props.currentSubscription?.confirmation_url : null);
 
 const formatPrice = (plan) => {
     if (!plan || Number(plan.monthly_price) <= 0) return 'Trial setup';
@@ -31,11 +32,70 @@ const limitLabel = (value, unlimitedLabel = 'Unlimited') => {
     return Number(value).toLocaleString();
 };
 
+const formatDate = (value) => {
+    if (!value) return 'Not available';
+
+    return new Intl.DateTimeFormat(undefined, {
+        year: 'numeric',
+        month: 'short',
+        day: 'numeric',
+    }).format(new Date(value));
+};
+
+const subscriptionState = computed(() => {
+    const subscription = props.currentSubscription;
+
+    if (!subscription) {
+        return {
+            tone: 'bg-zinc-50 text-zinc-700 border-zinc-200',
+            title: 'No paid subscription on record',
+            body: 'This workspace is currently on the free fallback state until a Shopify-approved trial or paid plan is confirmed.',
+        };
+    }
+
+    if (subscription.status === 'pending') {
+        return {
+            tone: 'bg-amber-50 text-amber-900 border-amber-200',
+            title: 'Waiting for Shopify approval',
+            body: 'The subscription request was created, but the merchant still needs to approve it inside Shopify billing.',
+        };
+    }
+
+    if (subscription.status === 'trialing') {
+        return {
+            tone: 'bg-teal-50 text-teal-900 border-teal-200',
+            title: 'Trial is active',
+            body: `The trial is running now${subscription.trial_ends_at ? ` and is expected to end on ${formatDate(subscription.trial_ends_at)}` : ''}.`,
+        };
+    }
+
+    if (subscription.status === 'active') {
+        return {
+            tone: 'bg-emerald-50 text-emerald-900 border-emerald-200',
+            title: 'Subscription is active',
+            body: subscription.current_period_ends_at
+                ? `The current billing period is expected to renew on ${formatDate(subscription.current_period_ends_at)}.`
+                : 'Shopify shows this subscription as active.',
+        };
+    }
+
+    return {
+        tone: 'bg-zinc-50 text-zinc-700 border-zinc-200',
+        title: 'Subscription not active',
+        body: 'No active paid subscription is currently attached to this workspace.',
+    };
+});
+
 const subscribe = (plan) => router.post(`/billing/plans/${plan.id}/subscribe`, {}, { preserveScroll: true });
 const syncBilling = () => router.post('/billing/sync', {}, { preserveScroll: true });
 const cancelSubscription = () => {
     if (confirm('Cancel the current Shopify subscription?')) {
         router.post('/billing/cancel', {}, { preserveScroll: true });
+    }
+};
+const resumeApproval = () => {
+    if (pendingConfirmationUrl.value) {
+        window.location.href = pendingConfirmationUrl.value;
     }
 };
 </script>
@@ -124,6 +184,15 @@ const cancelSubscription = () => {
                                     {{ props.billingReadiness.has_public_app_key ? 'Configured' : 'Pending' }}
                                 </span>
                             </div>
+                            <div class="flex items-start justify-between gap-3 rounded-md border border-zinc-200 bg-white p-3">
+                                <div>
+                                    <div class="font-semibold text-zinc-950">Paid plans configured</div>
+                                    <div class="text-zinc-500">At least one billable plan should have a real monthly price and Shopify billing handle.</div>
+                                </div>
+                                <span class="badge" :class="props.billingReadiness.has_paid_plan_config && !props.billingReadiness.misconfigured_paid_plans?.length ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'">
+                                    {{ props.billingReadiness.has_paid_plan_config && !props.billingReadiness.misconfigured_paid_plans?.length ? 'Ready' : 'Pending' }}
+                                </span>
+                            </div>
                         </div>
 
                         <div class="mt-4 flex flex-wrap gap-2">
@@ -147,6 +216,39 @@ const cancelSubscription = () => {
             <div v-if="props.billingReadiness.manual_connection_mode" class="rounded-md border border-sky-200 bg-sky-50 px-4 py-3 text-sm text-sky-900">
                 Manual store credentials are still enabled for development. For the public app path, we’ll replace this with managed Shopify install and OAuth.
             </div>
+
+            <div v-if="!props.billingReadiness.has_paid_plan_config" class="rounded-md border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+                No paid public plans are configured yet. Add a real monthly price to at least one active plan before submission.
+            </div>
+
+            <div v-if="props.billingReadiness.misconfigured_paid_plans?.length" class="rounded-md border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+                These paid plans are missing a Shopify billing handle: {{ props.billingReadiness.misconfigured_paid_plans.join(', ') }}.
+            </div>
+
+            <section class="rounded-md border p-4" :class="subscriptionState.tone">
+                <div class="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+                    <div class="flex items-start gap-3">
+                        <div class="grid size-10 shrink-0 place-items-center rounded-full bg-white/80">
+                            <Clock3 class="size-4" />
+                        </div>
+                        <div>
+                            <h2 class="text-sm font-bold">{{ subscriptionState.title }}</h2>
+                            <p class="mt-1 text-sm opacity-90">{{ subscriptionState.body }}</p>
+                        </div>
+                    </div>
+
+                    <div class="flex flex-wrap gap-2">
+                        <button v-if="pendingConfirmationUrl" class="btn btn-primary" type="button" @click="resumeApproval">
+                            <ExternalLink class="size-4" />
+                            Finish approval
+                        </button>
+                        <button class="btn btn-secondary" type="button" @click="syncBilling">
+                            <RefreshCw class="size-4" />
+                            Refresh state
+                        </button>
+                    </div>
+                </div>
+            </section>
 
             <section class="grid gap-4 xl:grid-cols-3">
                 <article
@@ -254,6 +356,22 @@ const cancelSubscription = () => {
                     <div class="rounded-md border border-zinc-200 p-3">
                         <div class="text-xs font-semibold uppercase text-zinc-500">Mode</div>
                         <div class="mt-2 font-semibold text-zinc-950">{{ props.currentSubscription.is_test ? 'Test charge' : 'Live charge' }}</div>
+                    </div>
+                    <div class="rounded-md border border-zinc-200 p-3">
+                        <div class="text-xs font-semibold uppercase text-zinc-500">Trial ends</div>
+                        <div class="mt-2 font-semibold text-zinc-950">{{ formatDate(props.currentSubscription.trial_ends_at) }}</div>
+                    </div>
+                    <div class="rounded-md border border-zinc-200 p-3">
+                        <div class="text-xs font-semibold uppercase text-zinc-500">Current period end</div>
+                        <div class="mt-2 font-semibold text-zinc-950">{{ formatDate(props.currentSubscription.current_period_ends_at) }}</div>
+                    </div>
+                    <div class="rounded-md border border-zinc-200 p-3">
+                        <div class="text-xs font-semibold uppercase text-zinc-500">Started from</div>
+                        <div class="mt-2 break-all font-semibold text-zinc-950">{{ props.currentSubscription.return_url ?? 'Shopify billing' }}</div>
+                    </div>
+                    <div class="rounded-md border border-zinc-200 p-3">
+                        <div class="text-xs font-semibold uppercase text-zinc-500">Approval link</div>
+                        <div class="mt-2 font-semibold text-zinc-950">{{ props.currentSubscription.confirmation_url ? 'Available' : 'Not needed' }}</div>
                     </div>
                 </div>
             </section>
