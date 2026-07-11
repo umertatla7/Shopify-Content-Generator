@@ -76,6 +76,13 @@ return [
         'manual_connection_mode' => env('SHOPIFY_MANUAL_CONNECTION_MODE', true),
     ],
 
+    'app_review' => [
+        'company_name' => env('APP_REVIEW_COMPANY_NAME', env('APP_NAME', 'GrowShopHigh')),
+        'support_email' => env('APP_REVIEW_SUPPORT_EMAIL', env('MAIL_FROM_ADDRESS')),
+        'legal_email' => env('APP_REVIEW_LEGAL_EMAIL', env('MAIL_FROM_ADDRESS')),
+        'website_url' => env('APP_REVIEW_WEBSITE_URL', env('APP_URL')),
+    ],
+
     'store_analysis' => [
         'via_queue' => env('STORE_ANALYSIS_VIA_QUEUE', false),
     ],

@@ -2,7 +2,7 @@
 import { computed } from 'vue';
 import { Head, router, usePage } from '@inertiajs/vue3';
 import AppLayout from '@/Layouts/AppLayout.vue';
-import { BadgeCheck, CheckCircle2, Clock3, CreditCard, ExternalLink, RefreshCw, ShieldCheck, Sparkles, Store } from 'lucide-vue-next';
+import { BadgeCheck, CheckCircle2, Clock3, CreditCard, ExternalLink, FileBadge2, LifeBuoy, RefreshCw, ScrollText, ShieldCheck, Sparkles, Store } from 'lucide-vue-next';
 
 const props = defineProps({
     plans: Array,
@@ -10,6 +10,7 @@ const props = defineProps({
     currentSubscription: Object,
     primaryStore: Object,
     billingReadiness: Object,
+    reviewAssets: Object,
 });
 
 const page = usePage();
@@ -248,6 +249,110 @@ const resumeApproval = () => {
                         </button>
                     </div>
                 </div>
+            </section>
+
+            <section class="grid gap-4 xl:grid-cols-[1.2fr_0.8fr]">
+                <article class="panel overflow-hidden">
+                    <div class="panel-header">
+                        <div>
+                            <h2 class="text-sm font-bold text-zinc-950">What you need to do in Shopify</h2>
+                            <p class="mt-1 text-sm text-zinc-500">This is the merchant billing path we want before App Store submission.</p>
+                        </div>
+                    </div>
+
+                    <div class="grid gap-3 p-4 md:grid-cols-2">
+                        <div class="rounded-md border border-zinc-200 p-3">
+                            <div class="text-xs font-semibold uppercase text-zinc-500">Step 1</div>
+                            <div class="mt-2 font-semibold text-zinc-950">Keep Shopify-managed billing</div>
+                            <p class="mt-2 text-sm leading-6 text-zinc-600">
+                                Charges should always be approved inside Shopify. Our app already uses Shopify subscription approval instead of a custom checkout form.
+                            </p>
+                        </div>
+                        <div class="rounded-md border border-zinc-200 p-3">
+                            <div class="text-xs font-semibold uppercase text-zinc-500">Step 2</div>
+                            <div class="mt-2 font-semibold text-zinc-950">Match paid plan handles</div>
+                            <p class="mt-2 text-sm leading-6 text-zinc-600">
+                                In Admin Plans, every paid tier needs a stable Shopify billing handle so Shopify subscriptions can sync back to the correct local plan.
+                            </p>
+                        </div>
+                        <div class="rounded-md border border-zinc-200 p-3">
+                            <div class="text-xs font-semibold uppercase text-zinc-500">Step 3</div>
+                            <div class="mt-2 font-semibold text-zinc-950">Test with development stores</div>
+                            <p class="mt-2 text-sm leading-6 text-zinc-600">
+                                Validate trial start, upgrade, downgrade, cancellation, uninstall, reinstall, and billing sync while test mode is still enabled.
+                            </p>
+                        </div>
+                        <div class="rounded-md border border-zinc-200 p-3">
+                            <div class="text-xs font-semibold uppercase text-zinc-500">Step 4</div>
+                            <div class="mt-2 font-semibold text-zinc-950">Switch production to live billing</div>
+                            <p class="mt-2 text-sm leading-6 text-zinc-600">
+                                After the flow is stable, set <code>SHOPIFY_BILLING_TEST_MODE=false</code> on live before submission or real merchant launch.
+                            </p>
+                        </div>
+                    </div>
+                </article>
+
+                <article class="panel overflow-hidden">
+                    <div class="panel-header">
+                        <div>
+                            <h2 class="text-sm font-bold text-zinc-950">Review assets</h2>
+                            <p class="mt-1 text-sm text-zinc-500">These links are useful for Shopify review and merchant trust.</p>
+                        </div>
+                    </div>
+
+                    <div class="space-y-3 p-4">
+                        <a :href="props.reviewAssets.billing_guide_url" target="_blank" class="flex items-center justify-between gap-3 rounded-md border border-zinc-200 p-3 hover:bg-zinc-50">
+                            <div class="flex items-center gap-3">
+                                <FileBadge2 class="size-4 text-teal-700" />
+                                <div>
+                                    <div class="font-semibold text-zinc-950">Billing guide</div>
+                                    <div class="text-sm text-zinc-500">Internal setup checklist for Shopify billing.</div>
+                                </div>
+                            </div>
+                            <ExternalLink class="size-4 text-zinc-400" />
+                        </a>
+                        <a :href="props.reviewAssets.review_guide_url" target="_blank" class="flex items-center justify-between gap-3 rounded-md border border-zinc-200 p-3 hover:bg-zinc-50">
+                            <div class="flex items-center gap-3">
+                                <ScrollText class="size-4 text-teal-700" />
+                                <div>
+                                    <div class="font-semibold text-zinc-950">Review guide</div>
+                                    <div class="text-sm text-zinc-500">Walkthrough for Shopify reviewers and QA.</div>
+                                </div>
+                            </div>
+                            <ExternalLink class="size-4 text-zinc-400" />
+                        </a>
+                        <a :href="props.reviewAssets.support_url" target="_blank" class="flex items-center justify-between gap-3 rounded-md border border-zinc-200 p-3 hover:bg-zinc-50">
+                            <div class="flex items-center gap-3">
+                                <LifeBuoy class="size-4 text-teal-700" />
+                                <div>
+                                    <div class="font-semibold text-zinc-950">Support page</div>
+                                    <div class="text-sm text-zinc-500">{{ props.reviewAssets.support_email || 'Set APP_REVIEW_SUPPORT_EMAIL in .env' }}</div>
+                                </div>
+                            </div>
+                            <ExternalLink class="size-4 text-zinc-400" />
+                        </a>
+                        <a :href="props.reviewAssets.privacy_policy_url" target="_blank" class="flex items-center justify-between gap-3 rounded-md border border-zinc-200 p-3 hover:bg-zinc-50">
+                            <div class="flex items-center gap-3">
+                                <ShieldCheck class="size-4 text-teal-700" />
+                                <div>
+                                    <div class="font-semibold text-zinc-950">Privacy policy</div>
+                                    <div class="text-sm text-zinc-500">Public merchant-facing policy page.</div>
+                                </div>
+                            </div>
+                            <ExternalLink class="size-4 text-zinc-400" />
+                        </a>
+                        <a :href="props.reviewAssets.terms_of_service_url" target="_blank" class="flex items-center justify-between gap-3 rounded-md border border-zinc-200 p-3 hover:bg-zinc-50">
+                            <div class="flex items-center gap-3">
+                                <ScrollText class="size-4 text-teal-700" />
+                                <div>
+                                    <div class="font-semibold text-zinc-950">Terms of service</div>
+                                    <div class="text-sm text-zinc-500">{{ props.reviewAssets.legal_email || 'Set APP_REVIEW_LEGAL_EMAIL in .env' }}</div>
+                                </div>
+                            </div>
+                            <ExternalLink class="size-4 text-zinc-400" />
+                        </a>
+                    </div>
+                </article>
             </section>
 
             <section class="grid gap-4 xl:grid-cols-3">

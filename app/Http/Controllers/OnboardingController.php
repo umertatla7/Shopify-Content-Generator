@@ -21,7 +21,7 @@ class OnboardingController extends Controller
                 ->forAccount($accountId)
                 ->where('status', 'connected')
                 ->withCount(['products', 'collections', 'pages', 'existingBlogs'])
-                ->with(['latestSyncLog:id,shopify_store_id,status,completed_at,started_at,error_message'])
+                ->with(['latestSyncLog:shopify_sync_logs.id,shopify_sync_logs.shopify_store_id,shopify_sync_logs.status,shopify_sync_logs.completed_at,shopify_sync_logs.started_at,shopify_sync_logs.error_message'])
                 ->latest('id')
                 ->first()
             : null;

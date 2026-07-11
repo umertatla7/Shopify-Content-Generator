@@ -2,6 +2,7 @@
 
 namespace App\Http\Middleware;
 
+use App\Models\ShopifyStore;
 use App\Support\PlanFeatureGate;
 use App\Support\ShopifyContext;
 use Illuminate\Http\Request;
@@ -39,6 +40,17 @@ class HandleInertiaRequests extends Middleware
     {
         $user = $request->user();
         $account = $user?->currentAccount;
+        $primaryStore = $account?->id
+            ? ShopifyStore::query()
+                ->forAccount($account->id)
+                ->where('status', 'connected')
+                ->withCount(['products', 'collections', 'pages', 'existingBlogs'])
+                ->latest('id')
+                ->first()
+            : null;
+        $catalogSynced = $primaryStore
+            ? (($primaryStore->products_count + $primaryStore->collections_count + $primaryStore->pages_count + $primaryStore->existing_blogs_count) > 0)
+            : false;
         $shopifyContext = app(ShopifyContext::class)->props($request);
         $planAccess = PlanFeatureGate::moduleAccess($account);
 
@@ -74,6 +86,12 @@ class HandleInertiaRequests extends Middleware
                     'team.manage' => $user->hasAccountPermission('team.manage'),
                 ] : [],
                 'plan_access' => $planAccess,
+                'setup' => [
+                    'store_connected' => (bool) $primaryStore,
+                    'catalog_synced' => $catalogSynced,
+                    'requires_catalog_sync' => (bool) $primaryStore && ! $catalogSynced,
+                    'primary_store_id' => $primaryStore?->id,
+                ],
             ],
             'shopify' => $shopifyContext,
             'flash' => [

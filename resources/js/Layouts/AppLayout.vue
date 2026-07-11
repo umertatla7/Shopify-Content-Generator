@@ -27,6 +27,7 @@ const page = usePage();
 const auth = computed(() => page.props.auth ?? {});
 const permissions = computed(() => auth.value.permissions ?? {});
 const planAccess = computed(() => auth.value.plan_access ?? auth.value.account?.plan_access ?? {});
+const setup = computed(() => auth.value.setup ?? {});
 const isAdmin = computed(() => Boolean(auth.value.user?.is_platform_admin));
 const shopify = computed(() => page.props.shopify ?? {});
 const sidebarCollapsed = ref(false);
@@ -44,6 +45,7 @@ const planLabel = computed(() => {
         .replace(/\b\w/g, (letter) => letter.toUpperCase());
 });
 const brandLogo = '/images/growthpilot-ai-logo.png';
+const requiresCatalogSync = computed(() => Boolean(setup.value.requires_catalog_sync));
 const contextQuery = computed(() => {
     const query = new URLSearchParams();
 
@@ -89,6 +91,36 @@ const customerItems = computed(() => [
     { href: '/rank-tracking', label: 'Keyword Tracking', section: 'Growth', icon: LineChart, show: true, locked: !planAccess.value.rank_tracking },
     { href: '/ai-visibility', label: 'AI Visibility', section: 'Growth', icon: Bot, show: true, locked: !planAccess.value.ai_visibility },
 ]);
+
+const preSyncAllowedHrefs = new Set(['/stores', '/billing']);
+
+const itemIsDisabled = (item) => {
+    if (isAdmin.value) {
+        return false;
+    }
+
+    if (item.locked) {
+        return true;
+    }
+
+    if (!requiresCatalogSync.value) {
+        return false;
+    }
+
+    return !preSyncAllowedHrefs.has(item.href);
+};
+
+const itemHint = (item) => {
+    if (item.locked) {
+        return 'Upgrade your plan to unlock this area.';
+    }
+
+    if (!isAdmin.value && requiresCatalogSync.value && !preSyncAllowedHrefs.has(item.href)) {
+        return 'Sync your Shopify store first to unlock this area.';
+    }
+
+    return undefined;
+};
 
 const adminItems = [
     { href: '/admin/dashboard', label: 'Overview', icon: BarChart3, show: true },
@@ -172,18 +204,23 @@ const logout = () => router.delete('/logout');
                     <div v-if="!sidebarCollapsed" class="px-3 text-[11px] font-semibold uppercase tracking-wide text-zinc-400">
                         {{ group.label }}
                     </div>
-                    <Link
+                    <component
+                        :is="itemIsDisabled(item) ? 'div' : Link"
                         v-for="item in group.items"
                         :key="item.href"
-                        :href="withShopifyContext(item.href)"
+                        v-bind="itemIsDisabled(item) ? {} : { href: withShopifyContext(item.href) }"
                         class="flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition"
-                        :title="sidebarCollapsed ? item.label : undefined"
-                        :class="isActive(item.href) ? 'bg-teal-50 text-teal-800 shadow-sm ring-1 ring-teal-100' : (item.locked ? 'text-zinc-500 hover:bg-zinc-100' : 'text-zinc-600 hover:bg-zinc-100 hover:text-zinc-950')"
+                        :title="sidebarCollapsed ? item.label : itemHint(item)"
+                        :class="itemIsDisabled(item)
+                            ? 'cursor-not-allowed bg-zinc-50 text-zinc-400'
+                            : (isActive(item.href)
+                                ? 'bg-teal-50 text-teal-800 shadow-sm ring-1 ring-teal-100'
+                                : 'text-zinc-600 hover:bg-zinc-100 hover:text-zinc-950')"
                     >
                         <component :is="item.icon" class="size-4" />
                         <span v-if="!sidebarCollapsed">{{ item.label }}</span>
-                        <LockKeyhole v-if="item.locked" class="ml-auto size-3.5 text-zinc-400" />
-                    </Link>
+                        <LockKeyhole v-if="itemIsDisabled(item)" class="ml-auto size-3.5 text-zinc-400" />
+                    </component>
                 </section>
                 </nav>
             </div>
@@ -215,17 +252,19 @@ const logout = () => router.delete('/logout');
                 </div>
 
                 <nav class="flex gap-1 overflow-x-auto border-t border-zinc-100 px-2 py-2 lg:hidden">
-                    <Link
+                    <component
                         v-for="item in items.filter((item) => item.show)"
                         :key="item.href"
-                        :href="withShopifyContext(item.href)"
+                        :is="itemIsDisabled(item) ? 'div' : Link"
+                        v-bind="itemIsDisabled(item) ? {} : { href: withShopifyContext(item.href) }"
                         class="flex shrink-0 items-center gap-2 rounded-xl px-3 py-2 text-sm font-medium"
-                        :class="isActive(item.href) ? 'bg-teal-50 text-teal-800' : (item.locked ? 'text-zinc-500' : 'text-zinc-600')"
+                        :title="itemHint(item)"
+                        :class="itemIsDisabled(item) ? 'bg-zinc-50 text-zinc-400' : (isActive(item.href) ? 'bg-teal-50 text-teal-800' : 'text-zinc-600')"
                     >
                         <component :is="item.icon" class="size-4" />
                         {{ item.label }}
-                        <LockKeyhole v-if="item.locked" class="size-3.5 text-zinc-400" />
-                    </Link>
+                        <LockKeyhole v-if="itemIsDisabled(item)" class="size-3.5 text-zinc-400" />
+                    </component>
                 </nav>
             </header>
 

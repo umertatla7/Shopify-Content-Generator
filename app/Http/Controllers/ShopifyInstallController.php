@@ -10,6 +10,9 @@ use App\Models\User;
 use App\Services\AccountProvisioningService;
 use App\Services\Shopify\ShopifyService;
 use App\Support\ShopifyContext;
+use Illuminate\Contracts\View\View;
+use Illuminate\Http\Response;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -19,6 +22,9 @@ use RuntimeException;
 
 class ShopifyInstallController extends Controller
 {
+    private const OAUTH_CACHE_PREFIX = 'shopify_oauth:';
+    private const EMBEDDED_AUTH_CACHE_PREFIX = 'shopify_embedded_auth:';
+
     public function app(Request $request, ShopifyService $shopify, ShopifyContext $shopifyContext): RedirectResponse
     {
         $shopifyContext->remember($request);
@@ -29,6 +35,15 @@ class ShopifyInstallController extends Controller
             return redirect()->route('login')->withErrors([
                 'shopify' => 'A valid Shopify shop domain is required.',
             ]);
+        }
+
+        if (! $request->user() && filled((string) $request->query('install_token', ''))) {
+            $user = $this->consumeEmbeddedAuthToken($request, $shop);
+
+            if ($user) {
+                return redirect()->to($shopifyContext->decorate(route('shopify.app', ['shop' => $shop]), $request))
+                    ->with('status', 'Shopify install confirmed. Finishing workspace sign-in...');
+            }
         }
 
         $user = $request->user();
@@ -59,7 +74,7 @@ class ShopifyInstallController extends Controller
         return redirect()->to($shopifyContext->decorate(route('shopify.install.start', ['shop' => $shop]), $request));
     }
 
-    public function start(Request $request, ShopifyService $shopify): RedirectResponse
+    public function start(Request $request, ShopifyService $shopify): RedirectResponse|View
     {
         $shop = $shopify->normalizeDomain((string) $request->query('shop', ''));
 
@@ -75,16 +90,27 @@ class ShopifyInstallController extends Controller
 
         $state = Str::random(40);
 
-        $request->session()->put('shopify_oauth', [
+        $oauth = [
             'state' => $state,
             'shop' => $shop,
             'account_id' => $request->user()?->current_account_id,
             'user_id' => $request->user()?->id,
             'started_at' => now()->toIso8601String(),
-        ]);
+        ];
+        $request->session()->put('shopify_oauth', $oauth);
+        Cache::put($this->oauthCacheKey($state), $oauth, now()->addMinutes(15));
 
         try {
-            return redirect()->away($shopify->authorizationUrl($shop, $state));
+            $target = $shopify->authorizationUrl($shop, $state);
+
+            if ($this->isEmbeddedRequest($request)) {
+                return view('shopify-redirect', [
+                    'target' => $target,
+                    'message' => 'Redirecting to Shopify to finish authorization...',
+                ]);
+            }
+
+            return redirect()->away($target);
         } catch (RuntimeException $exception) {
             $target = $request->user() ? route('stores.index') : route('login');
 
@@ -99,9 +125,19 @@ class ShopifyInstallController extends Controller
         ShopifyService $shopify,
         ShopifyContext $shopifyContext,
         AccountProvisioningService $accounts,
-    ): RedirectResponse
+    ): RedirectResponse|Response|View
     {
-        $oauth = $request->session()->pull('shopify_oauth');
+        $state = (string) $request->query('state', '');
+        $sessionOauth = $request->session()->pull('shopify_oauth');
+        $cachedOauth = $state !== '' ? Cache::pull($this->oauthCacheKey($state)) : null;
+        $oauth = $sessionOauth;
+
+        if (
+            (! $oauth || (string) ($oauth['state'] ?? '') !== $state)
+            && is_array($cachedOauth)
+        ) {
+            $oauth = $cachedOauth;
+        }
 
         if (! $oauth) {
             return redirect()->to($shopifyContext->decorate(route('stores.index'), $request))->withErrors([
@@ -123,7 +159,7 @@ class ShopifyInstallController extends Controller
             ]);
         }
 
-        if ((string) $request->query('state', '') !== (string) ($oauth['state'] ?? '')) {
+        if ($state !== (string) ($oauth['state'] ?? '')) {
             return redirect()->to($shopifyContext->decorate(route('stores.index'), $request))->withErrors([
                 'shopify' => 'The Shopify install state did not match. Please try again.',
             ]);
@@ -171,11 +207,30 @@ class ShopifyInstallController extends Controller
             ? "Shopify connected for {$store->name}. Your workspace is ready, and you can use {$identity['user']->email} with Forgot Password any time you need a direct sign-in link."
             : "Shopify connected for {$store->name}. Your workspace is ready.";
 
+        if ($this->isEmbeddedRequest($request)) {
+            $token = $this->issueEmbeddedAuthToken($identity['user'], $identity['account'], $store, $shop);
+            $redirectTo = $shopifyContext->embeddedAppUrl($request, '/shopify/app', [
+                'embedded' => '1',
+                'shop' => $shop,
+                'install_token' => $token,
+            ]);
+
+            if ($redirectTo) {
+                return response()->view('shopify-redirect', [
+                    'target' => $redirectTo,
+                    'message' => 'Redirecting back to Shopify to finish opening your app...',
+                ], Response::HTTP_OK)->withHeaders([
+                    'Cache-Control' => 'no-store, no-cache, must-revalidate, max-age=0',
+                ]);
+            }
+        }
+
         $destination = $this->shouldShowOnboarding($store, $identity)
             ? route('onboarding')
             : route('dashboard');
+        $redirectTo = $shopifyContext->decorate($destination, $request);
 
-        return redirect()->to($shopifyContext->decorate($destination, $request))
+        return redirect()->to($redirectTo)
             ->with('status', $status);
     }
 
@@ -250,6 +305,10 @@ class ShopifyInstallController extends Controller
         }
 
         $account = $user->currentAccount;
+
+        if (! $request->user() && $account && ! $this->accountCanAcceptStore($account, $shop)) {
+            $account = null;
+        }
 
         if (! $account) {
             $account = $accounts->createForUser($user, $this->accountName($metadata, $shop));
@@ -339,6 +398,24 @@ class ShopifyInstallController extends Controller
         }
     }
 
+    private function accountCanAcceptStore(Account $account, string $shop): bool
+    {
+        $existingStore = ShopifyStore::query()
+            ->where('account_id', $account->id)
+            ->where('shop_domain', $shop)
+            ->exists();
+
+        if ($existingStore) {
+            return true;
+        }
+
+        $plan = Plan::query()->where('key', $account->plan_key)->first();
+        $storeLimit = (int) ($plan?->store_limit ?? 1);
+        $storeCount = ShopifyStore::forAccount($account->id)->count();
+
+        return $storeCount < $storeLimit;
+    }
+
     private function merchantEmail(array $metadata): string
     {
         $email = (string) ($metadata['contactEmail'] ?? $metadata['email'] ?? '');
@@ -358,6 +435,70 @@ class ShopifyInstallController extends Controller
     private function accountName(array $metadata, string $shop): string
     {
         return $this->merchantName($metadata, $shop);
+    }
+
+    private function oauthCacheKey(string $state): string
+    {
+        return self::OAUTH_CACHE_PREFIX.$state;
+    }
+
+    private function embeddedAuthCacheKey(string $token): string
+    {
+        return self::EMBEDDED_AUTH_CACHE_PREFIX.$token;
+    }
+
+    private function isEmbeddedRequest(Request $request): bool
+    {
+        if ($request->boolean('embedded')) {
+            return true;
+        }
+
+        return filled((string) $request->query('host', ''));
+    }
+
+    private function issueEmbeddedAuthToken(User $user, Account $account, ShopifyStore $store, string $shop): string
+    {
+        $token = Str::random(64);
+
+        Cache::put($this->embeddedAuthCacheKey($token), [
+            'user_id' => $user->id,
+            'account_id' => $account->id,
+            'shopify_store_id' => $store->id,
+            'shop' => $shop,
+        ], now()->addMinutes(10));
+
+        return $token;
+    }
+
+    private function consumeEmbeddedAuthToken(Request $request, string $shop): ?User
+    {
+        $token = (string) $request->query('install_token', '');
+        $payload = Cache::pull($this->embeddedAuthCacheKey($token));
+
+        if (! is_array($payload) || ($payload['shop'] ?? null) !== $shop) {
+            return null;
+        }
+
+        $user = User::query()->find($payload['user_id'] ?? null);
+        $account = Account::query()->find($payload['account_id'] ?? null);
+        $store = ShopifyStore::query()->find($payload['shopify_store_id'] ?? null);
+
+        if (! $user || ! $account || ! $store) {
+            return null;
+        }
+
+        if ((int) $store->account_id !== (int) $account->id || $store->shop_domain !== $shop) {
+            return null;
+        }
+
+        $user->forceFill([
+            'current_account_id' => $account->id,
+        ])->save();
+
+        Auth::login($user);
+        $request->session()->regenerate();
+
+        return $user->fresh();
     }
 
     private function shouldShowOnboarding(ShopifyStore $store, array $identity): bool

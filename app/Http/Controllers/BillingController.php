@@ -38,6 +38,15 @@ class BillingController extends Controller
                 ? $this->currentSubscriptionForAccount($account)
                 : null,
             'primaryStore' => $primaryStore,
+            'reviewAssets' => [
+                'privacy_policy_url' => route('public.privacy'),
+                'terms_of_service_url' => route('public.terms'),
+                'support_url' => route('public.support'),
+                'billing_guide_url' => route('public.billing-guide'),
+                'review_guide_url' => route('public.review-guide'),
+                'support_email' => config('services.app_review.support_email'),
+                'legal_email' => config('services.app_review.legal_email'),
+            ],
             'billingReadiness' => [
                 'has_connected_store' => (bool) $primaryStore,
                 'has_public_app_key' => filled(config('services.shopify.public_app_api_key')),
@@ -45,6 +54,8 @@ class BillingController extends Controller
                 'uses_shopify_billing' => true,
                 'has_paid_plan_config' => $paidPlans->isNotEmpty(),
                 'misconfigured_paid_plans' => $misconfiguredPaidPlans->pluck('name')->values()->all(),
+                'has_support_email' => filled(config('services.app_review.support_email')),
+                'has_legal_email' => filled(config('services.app_review.legal_email')),
             ],
         ]);
     }

@@ -29,6 +29,7 @@ use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\OnboardingController;
 use App\Http\Controllers\ProductContentController;
 use App\Http\Controllers\ProductController;
+use App\Http\Controllers\PublicPageController;
 use App\Http\Controllers\SearchConsoleController;
 use App\Http\Controllers\ShopifyInstallController;
 use App\Http\Controllers\ShopifyStoreController;
@@ -36,6 +37,12 @@ use App\Http\Controllers\StoreAnalysisController;
 use App\Http\Controllers\StoreKnowledgeBaseController;
 use App\Http\Controllers\TeamController;
 use Illuminate\Support\Facades\Route;
+
+Route::get('/privacy-policy', [PublicPageController::class, 'privacy'])->name('public.privacy');
+Route::get('/terms-of-service', [PublicPageController::class, 'terms'])->name('public.terms');
+Route::get('/support', [PublicPageController::class, 'support'])->name('public.support');
+Route::get('/shopify/billing-guide', [PublicPageController::class, 'billingGuide'])->name('public.billing-guide');
+Route::get('/shopify/review-guide', [PublicPageController::class, 'reviewGuide'])->name('public.review-guide');
 
 Route::middleware('guest')->group(function (): void {
     Route::get('/', fn () => redirect()->route('login'));
