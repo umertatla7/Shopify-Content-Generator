@@ -25,7 +25,7 @@ class ShopifyInstallController extends Controller
     private const OAUTH_CACHE_PREFIX = 'shopify_oauth:';
     private const EMBEDDED_AUTH_CACHE_PREFIX = 'shopify_embedded_auth:';
 
-    public function app(Request $request, ShopifyService $shopify, ShopifyContext $shopifyContext): RedirectResponse
+    public function app(Request $request, ShopifyService $shopify, ShopifyContext $shopifyContext): RedirectResponse|Response|View
     {
         $shopifyContext->remember($request);
 
@@ -59,6 +59,45 @@ class ShopifyInstallController extends Controller
             $store = ShopifyStore::query()->where('shop_domain', $shop)->first();
         }
 
+        if (! $request->user() && $store?->credential?->admin_api_access_token) {
+            $store->loadMissing(['connectedBy', 'account.owner', 'account.users']);
+
+            $account = $store->account;
+            $fallbackUser = $store->connectedBy
+                ?: $account?->owner
+                ?: $account?->users->first();
+
+            if ($account && $fallbackUser) {
+                $token = $this->issueEmbeddedAuthToken($fallbackUser, $account, $store, $shop);
+                $embeddedRequest = $this->isEmbeddedRequest($request);
+                $redirectTo = $embeddedRequest
+                    ? ($shopifyContext->embeddedAppUrl($request, '/shopify/app', [
+                        'embedded' => '1',
+                        'shop' => $shop,
+                        'install_token' => $token,
+                    ]) ?: $shopifyContext->decorate(route('shopify.app', [
+                        'shop' => $shop,
+                        'install_token' => $token,
+                    ]), $request))
+                    : $shopifyContext->decorate(route('shopify.app', [
+                        'shop' => $shop,
+                        'install_token' => $token,
+                    ]), $request);
+
+                if ($embeddedRequest) {
+                    return response()->view('shopify-redirect', [
+                        'target' => $redirectTo,
+                        'message' => "Restoring {$store->name} so Shopify can reopen your workspace...",
+                    ], Response::HTTP_OK)->withHeaders([
+                        'Cache-Control' => 'no-store, no-cache, must-revalidate, max-age=0',
+                    ]);
+                }
+
+                return redirect()->to($redirectTo)
+                    ->with('status', "Restoring {$store->name} so Shopify can reopen your workspace...");
+            }
+        }
+
         if ($store?->credential?->admin_api_access_token && $user?->belongsToAccount($store->account_id)) {
             $destination = $this->shouldShowOnboarding($store, [
                 'created_user' => false,
@@ -84,7 +123,7 @@ class ShopifyInstallController extends Controller
             ]);
         }
 
-        if ($request->user()) {
+        if ($request->user() && ! $this->isEmbeddedRequest($request)) {
             $this->ensureStoreSlotAvailable($request->user()->currentAccount, $shop);
         }
 

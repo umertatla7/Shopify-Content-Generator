@@ -53,7 +53,33 @@ class ShopifyInstallControllerTest extends TestCase
         $this->assertSame($oauth, Cache::get('shopify_oauth:'.$oauth['state']));
     }
 
-    public function test_shopify_app_for_guest_with_existing_store_restarts_install_flow(): void
+    public function test_shopify_install_start_allows_embedded_second_store_install_even_when_current_account_is_full(): void
+    {
+        config()->set('services.shopify.public_app_api_key', 'shopify_key');
+        config()->set('services.shopify.public_app_client_secret', 'shopify_secret');
+        config()->set('services.shopify.public_app_scopes', ['read_products', 'write_products']);
+
+        $owner = $this->memberWithStorePermission();
+
+        ShopifyStore::query()->create([
+            'account_id' => $owner->current_account_id,
+            'connected_by' => $owner->id,
+            'name' => 'Existing Store',
+            'shop_domain' => 'existing-store.myshopify.com',
+            'shop_url' => 'https://existing-store.myshopify.com',
+            'status' => 'connected',
+        ]);
+
+        $response = $this
+            ->actingAs($owner)
+            ->get('/shopify/install/start?shop=second-store.myshopify.com&host=test-host&embedded=1');
+
+        $response->assertOk();
+        $response->assertSee('Redirecting to Shopify', false);
+        $response->assertSee('https://second-store.myshopify.com/admin/oauth/authorize?', false);
+    }
+
+    public function test_shopify_app_for_guest_with_existing_store_uses_embedded_bounce_page_for_session_restore(): void
     {
         config()->set('services.shopify.public_app_api_key', 'shopify_key');
         config()->set('services.shopify.public_app_client_secret', 'shopify_secret');
@@ -76,9 +102,16 @@ class ShopifyInstallControllerTest extends TestCase
             'scopes' => ['read_products', 'write_products'],
         ]);
 
-        $response = $this->get('/shopify/app?shop=umerjewelry.myshopify.com');
+        $host = base64_encode('admin.shopify.com/store/umer-jewelry');
 
-        $response->assertRedirect('/shopify/install/start?shop=umerjewelry.myshopify.com');
+        $response = $this->get('/shopify/app?shop=umerjewelry.myshopify.com&host='.$host.'&embedded=1');
+
+        $response->assertOk();
+        $response->assertSee('Redirecting to Shopify', false);
+        $response->assertSee('https://admin.shopify.com/store/umer-jewelry/apps/shopify_key/shopify/app?', false);
+        $response->assertSee('shop=umerjewelry.myshopify.com', false);
+        $response->assertSee('install_token=', false);
+        $response->assertDontSee('/shopify/install/start', false);
     }
 
     public function test_shopify_app_for_authenticated_user_redirects_to_onboarding_when_store_has_not_been_synced(): void
