@@ -7,6 +7,7 @@ use App\Models\Account;
 use App\Models\Plan;
 use App\Models\ShopifyStore;
 use App\Models\User;
+use App\Notifications\NewShopifySignupNotification;
 use App\Services\AccountProvisioningService;
 use App\Services\Shopify\ShopifyService;
 use App\Support\ShopifyContext;
@@ -16,6 +17,7 @@ use Illuminate\Support\Facades\Cache;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Notification;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 use RuntimeException;
@@ -241,6 +243,8 @@ class ShopifyInstallController extends Controller
             'ip_address' => $request->ip(),
             'user_agent' => $request->userAgent(),
         ]);
+
+        $this->notifyAdminOfNewSignup($identity, $store);
 
         $status = $identity['created_user']
             ? "Shopify connected for {$store->name}. Your workspace is ready, and you can use {$identity['user']->email} with Forgot Password any time you need a direct sign-in link."
@@ -550,5 +554,33 @@ class ShopifyInstallController extends Controller
             && ! $store->collections()->exists()
             && ! $store->pages()->exists()
             && ! $store->existingBlogs()->exists();
+    }
+
+    private function notifyAdminOfNewSignup(array $identity, ShopifyStore $store): void
+    {
+        if (! ($identity['created_user'] ?? false) && ! ($identity['created_account'] ?? false)) {
+            return;
+        }
+
+        $recipient = config('services.app_review.support_email');
+
+        if (! filled($recipient)) {
+            return;
+        }
+
+        $account = $identity['account']?->fresh('plan');
+        $user = $identity['user']?->fresh();
+
+        if (! $account || ! $user) {
+            return;
+        }
+
+        $planName = $account->plan?->name
+            ?? Plan::query()->where('key', $account->plan_key)->value('name')
+            ?? Str::headline((string) $account->plan_key);
+
+        Notification::route('mail', $recipient)->notify(
+            new NewShopifySignupNotification($user, $account, $store, $planName)
+        );
     }
 }

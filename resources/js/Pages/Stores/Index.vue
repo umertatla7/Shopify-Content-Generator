@@ -17,12 +17,15 @@ const props = defineProps({
 
 const page = usePage();
 const shopify = computed(() => page.props.shopify ?? {});
+const setup = computed(() => page.props.auth?.setup ?? {});
 const isAuditMode = computed(() => props.mode === 'audit');
 const pageTitle = computed(() => isAuditMode.value ? 'Store Audit' : 'Store');
 const pageDescription = computed(() => isAuditMode.value
     ? 'Review store audit reports, performance, SEO findings, and content gaps for the connected store.'
     : 'Manage the connected Shopify store, run syncs, and keep catalog data up to date before using the SEO tools.');
 const primaryStore = computed(() => props.stores?.[0] ?? null);
+const catalogSynced = computed(() => Boolean(setup.value.catalog_synced));
+const canShowConnectButton = computed(() => !primaryStore.value && !shopify.value.embedded);
 
 const showConnectForm = ref(false);
 
@@ -225,19 +228,23 @@ const formatBytes = (bytes) => {
                     <p class="text-sm text-zinc-500">{{ pageDescription }}</p>
                 </div>
                 <div class="flex flex-wrap gap-2">
-                    <button v-if="!isAuditMode" class="btn btn-primary" type="button" @click="showConnectForm = !showConnectForm">
+                    <button v-if="!isAuditMode && canShowConnectButton" class="btn btn-primary" type="button" @click="showConnectForm = !showConnectForm">
                         <span>{{ showConnectForm ? 'Close store form' : 'Connect store' }}</span>
                     </button>
                     <Link v-if="isAuditMode" href="/stores" class="btn btn-secondary">
                         Store center
                     </Link>
-                    <Link v-else href="/store-audit" class="btn btn-secondary">
+                    <Link v-else-if="catalogSynced" href="/store-audit" class="btn btn-secondary">
                         Store audit
                     </Link>
                     <Link href="/billing" class="btn btn-secondary">
                         View billing
                     </Link>
                 </div>
+            </div>
+
+            <div v-if="!catalogSynced && primaryStore && !isAuditMode" class="rounded-md border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+                Your Shopify store is already connected. Sync products, collections, pages, and blogs first, then Store Audit and the other content tools will unlock with real data.
             </div>
 
             <section class="panel overflow-hidden">
@@ -447,7 +454,7 @@ const formatBytes = (bytes) => {
                                 <td>
                                     <div class="flex gap-2">
                                         <template v-if="isAuditMode">
-                                            <button class="btn btn-secondary" title="Run store audit" @click="analyze(store)">
+                                            <button v-if="catalogSynced" class="btn btn-secondary" title="Run store audit" @click="analyze(store)">
                                                 <Brain class="size-4" />
                                             </button>
                                         </template>

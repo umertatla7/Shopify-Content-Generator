@@ -2,6 +2,7 @@
 import { computed, ref, watch } from 'vue';
 import { Head, router, useForm } from '@inertiajs/vue3';
 import AppLayout from '@/Layouts/AppLayout.vue';
+import InfoHint from '@/Components/InfoHint.vue';
 import { Check, FilePlus2, Filter, LoaderCircle, Sparkles, X } from 'lucide-vue-next';
 
 const props = defineProps({
@@ -140,9 +141,9 @@ const allTopicCards = computed(() => [
     ...rejectedTopicCards.value,
 ]);
 const topicFilterOptions = computed(() => [
-    { key: 'waiting', label: 'Waiting', count: waitingTopics.value.length },
-    { key: 'approved', label: 'Approved', count: approvedTopicCards.value.length },
-    { key: 'rejected', label: 'Rejected', count: rejectedTopicCards.value.length },
+    { key: 'waiting', label: 'Ideas to review', count: waitingTopics.value.length },
+    { key: 'approved', label: 'Ready to write', count: approvedTopicCards.value.length },
+    { key: 'rejected', label: 'Skipped', count: rejectedTopicCards.value.length },
     { key: 'all', label: 'All', count: allTopicCards.value.length },
 ]);
 const visibleTopics = computed(() => {
@@ -220,6 +221,20 @@ const generateSelectedBlogs = () => {
         },
     });
 };
+
+const topicStatusLabel = (status) => ({
+    waiting: 'Needs review',
+    approved: 'Ready to write',
+    rejected: 'Skipped',
+}[status] ?? status);
+
+const openExistingBlog = (topic) => {
+    const blogId = topic.blogs?.[0]?.id;
+
+    if (blogId) {
+        router.get(`/blogs/${blogId}/edit`);
+    }
+};
 </script>
 
 <template>
@@ -230,8 +245,11 @@ const generateSelectedBlogs = () => {
         <div class="space-y-6">
             <div class="flex flex-wrap items-center justify-between gap-3">
                 <div>
-                    <h2 class="text-base font-bold text-zinc-950">Topic ideas</h2>
-                    <p class="text-sm text-zinc-500">Generate new blog ideas, review them, then create drafts from the approved topics.</p>
+                    <div class="flex items-center gap-2">
+                        <h2 class="text-base font-bold text-zinc-950">Topic ideas</h2>
+                        <InfoHint text="Generate blog ideas from your Shopify catalog, save the good ones, then open the blog editor to write the full article." />
+                    </div>
+                    <p class="text-sm text-zinc-500">Generate ideas, keep the best ones, then open the blog editor to write the full article.</p>
                 </div>
                 <button class="btn btn-primary" type="button" @click="showGenerateForm = !showGenerateForm">
                     <X v-if="showGenerateForm" class="size-4" />
@@ -371,13 +389,16 @@ const generateSelectedBlogs = () => {
                 <div class="panel p-4">
                     <div class="flex flex-wrap items-center justify-between gap-3">
                         <div>
-                            <h2 class="text-sm font-bold text-zinc-950">Topic review</h2>
-                            <p class="text-xs text-zinc-500">Review generated ideas, then create blog drafts for the approved topics.</p>
+                            <div class="flex items-center gap-2">
+                                <h2 class="text-sm font-bold text-zinc-950">Topic review</h2>
+                                <InfoHint text="Step 1: review new ideas. Step 2: move the keepers into Ready to write. Step 3: click Write blog to open the blog editor." />
+                            </div>
+                            <p class="text-xs text-zinc-500">Step 1 review ideas. Step 2 move good ones to Ready to write. Step 3 write the full blog.</p>
                         </div>
                         <button class="btn btn-primary" type="button" :disabled="!selectedTopics.length || draftForm.processing" @click="generateSelectedBlogs">
                             <LoaderCircle v-if="draftForm.processing" class="size-4 animate-spin" />
                             <FilePlus2 v-else class="size-4" />
-                            Draft selected
+                            Write selected blogs
                         </button>
                     </div>
                     <div class="mt-4 flex flex-wrap items-center gap-2">
@@ -421,9 +442,10 @@ const generateSelectedBlogs = () => {
                                     <div class="mt-1 flex flex-wrap items-center gap-2 text-xs text-zinc-500">
                                         <span>{{ topic.store?.name }} · {{ topic.search_intent ?? 'intent pending' }}</span>
                                         <span v-if="isNewBatch(topic)" class="badge bg-teal-100 text-teal-800">New batch</span>
+                                        <span v-if="topic.blogs_count" class="badge bg-indigo-100 text-indigo-800">Blog ready</span>
                                     </div>
                                 </div>
-                                <span class="badge shrink-0" :class="`badge-${topic.status}`">{{ topic.status }}</span>
+                                <span class="badge shrink-0" :class="`badge-${topic.status}`">{{ topicStatusLabel(topic.status) }}</span>
                             </div>
                             <dl class="grid gap-3 text-sm sm:grid-cols-2">
                                 <div>
@@ -449,13 +471,16 @@ const generateSelectedBlogs = () => {
                             </dl>
                             <div class="mt-4 flex flex-wrap gap-2">
                                 <button v-if="topic.status !== 'approved' && topic.status !== 'rejected'" class="btn btn-secondary" title="Approve" @click="approve(topic)">
-                                    <Check class="size-4" />Approve
+                                    <Check class="size-4" />Save for later
                                 </button>
-                                <button v-if="topic.status !== 'rejected'" class="btn btn-primary" title="Generate blog" @click="generateBlog(topic)">
-                                    <FilePlus2 class="size-4" />Draft
+                                <button v-if="topic.blogs_count" class="btn btn-secondary" title="Open blog" @click="openExistingBlog(topic)">
+                                    <FilePlus2 class="size-4" />View blog
+                                </button>
+                                <button v-else-if="topic.status !== 'rejected'" class="btn btn-primary" title="Generate blog" @click="generateBlog(topic)">
+                                    <FilePlus2 class="size-4" />Write blog
                                 </button>
                                 <button v-if="topic.status !== 'approved' && topic.status !== 'rejected'" class="btn btn-danger" title="Reject" @click="reject(topic)">
-                                    <X class="size-4" />Reject
+                                    <X class="size-4" />Skip
                                 </button>
                             </div>
                         </div>

@@ -2,8 +2,9 @@
 import { computed, ref } from 'vue';
 import { Head, Link, router } from '@inertiajs/vue3';
 import AppLayout from '@/Layouts/AppLayout.vue';
+import InfoHint from '@/Components/InfoHint.vue';
 import TablePagination from '@/Components/TablePagination.vue';
-import { Coins, ExternalLink, LoaderCircle, RefreshCw, Search, Sparkles, UploadCloud, X } from 'lucide-vue-next';
+import { Coins, ExternalLink, LoaderCircle, RefreshCw, Search, Sparkles, Undo2, UploadCloud, X } from 'lucide-vue-next';
 
 const props = defineProps({
     products: Object,
@@ -17,6 +18,7 @@ const props = defineProps({
 });
 
 const selected = ref(null);
+const originalContent = ref(null);
 const creditBalance = ref(props.credits.balance ?? 0);
 const contentError = ref('');
 const contentStatus = ref('');
@@ -55,6 +57,7 @@ const selectedStyleCost = computed(() => props.productCreditCosts[contentForm.va
 const hasEnoughCredits = computed(() => selectedStyleCost.value <= creditBalance.value);
 const productMetric = computed(() => props.planUsage?.metrics?.product_descriptions ?? null);
 const syncingStore = ref(false);
+const hasGeneratedDraft = computed(() => Boolean(contentForm.value.generated_title || contentForm.value.generated_description));
 
 const plainDescription = (html) => {
     if (!html) return 'No description synced from Shopify.';
@@ -127,6 +130,12 @@ const openProduct = (product) => {
     selected.value = product;
     contentError.value = '';
     contentStatus.value = '';
+    originalContent.value = {
+        title: product.title || '',
+        description: plainDescription(product.description || ''),
+        seo_title: product.seo_title || '',
+        seo_description: product.seo_description || '',
+    };
     contentForm.value = {
         base_title: product.generated_title || product.title || '',
         base_description: plainDescription(product.generated_description || product.description || ''),
@@ -168,12 +177,37 @@ const generateContent = async () => {
         contentForm.value.generated_description = product.generated_description || '';
         contentForm.value.generated_seo_title = product.generated_seo_title || '';
         contentForm.value.generated_seo_description = product.generated_seo_description || '';
+        contentForm.value.base_title = product.generated_title || contentForm.value.base_title;
+        contentForm.value.base_description = plainDescription(product.generated_description || contentForm.value.base_description);
         creditBalance.value = Math.max(0, creditBalance.value - selectedStyleCost.value);
-        contentStatus.value = response.data.message;
+        contentStatus.value = 'AI draft ready. Review the title and description below, then push to Shopify when you are happy with it.';
     } catch (error) {
         contentError.value = error.response?.data?.message ?? 'Product content generation failed.';
     } finally {
         generatingContent.value = false;
+    }
+};
+
+const restoreOriginalContent = () => {
+    if (!originalContent.value) return;
+
+    contentForm.value.base_title = originalContent.value.title;
+    contentForm.value.base_description = originalContent.value.description;
+    contentForm.value.generated_title = '';
+    contentForm.value.generated_description = '';
+    contentForm.value.generated_seo_title = originalContent.value.seo_title;
+    contentForm.value.generated_seo_description = originalContent.value.seo_description;
+    contentStatus.value = 'Restored the original Shopify content in this window.';
+    contentError.value = '';
+
+    if (selected.value) {
+        replaceProduct({
+            ...selected.value,
+            generated_title: null,
+            generated_description: null,
+            generated_seo_title: null,
+            generated_seo_description: null,
+        });
     }
 };
 
@@ -435,15 +469,28 @@ const changePerPage = (perPage) => {
 
                     <div class="space-y-5">
                         <div>
-                            <h3 class="mb-2 text-sm font-bold text-zinc-950">Description</h3>
-                            <div class="prose prose-sm max-w-none rounded-md border border-zinc-200 p-4 text-zinc-700" v-html="selected.description || plainDescription(selected.description)" />
+                            <div class="mb-2 flex items-center gap-2">
+                                <h3 class="text-sm font-bold text-zinc-950">{{ hasGeneratedDraft ? 'Original Shopify content' : 'Current Shopify content' }}</h3>
+                                <InfoHint text="This is the live content currently synced from Shopify. It stays here as a reference while you review the AI version." />
+                            </div>
+                            <div class="rounded-md border border-zinc-200 p-4 text-zinc-700">
+                                <div class="text-sm font-semibold text-zinc-950">{{ originalContent?.title || selected.title }}</div>
+                                <div class="prose prose-sm mt-3 max-w-none text-zinc-700" v-html="selected.description || plainDescription(selected.description)" />
+                            </div>
                         </div>
 
                         <section class="rounded-md border border-teal-200 bg-teal-50/50 p-4">
                             <div class="mb-4 flex flex-wrap items-start justify-between gap-3">
                                 <div>
-                                    <h3 class="text-sm font-bold text-zinc-950">AI product content</h3>
-                                    <p class="mt-1 text-xs text-zinc-600">Generate an SEO-friendly title and description, review it, then push it to Shopify.</p>
+                                    <div class="flex items-center gap-2">
+                                        <h3 class="text-sm font-bold text-zinc-950">{{ hasGeneratedDraft ? 'Review your AI version' : 'Generate AI product content' }}</h3>
+                                        <InfoHint text="Generate a stronger product title and description, review the result, then decide when to push it live to Shopify." />
+                                    </div>
+                                    <p class="mt-1 text-xs text-zinc-600">
+                                        {{ hasGeneratedDraft
+                                            ? 'The AI version is now the working copy below. Edit it if needed, undo it, or push it live to Shopify.'
+                                            : 'Start from your current product details, generate a better version, then review it before anything goes live.' }}
+                                    </p>
                                 </div>
                                 <div class="inline-flex items-center gap-2 rounded-md bg-white px-3 py-2 text-xs font-semibold text-zinc-700">
                                     <Coins class="size-4 text-teal-700" />
@@ -453,8 +500,9 @@ const changePerPage = (perPage) => {
 
                             <div class="grid gap-4 md:grid-cols-2">
                                 <div>
-                                    <label>Basic title</label>
-                                    <input v-model="contentForm.base_title" />
+                                    <label>{{ hasGeneratedDraft ? 'AI title to review' : 'Current product title' }}</label>
+                                    <input v-if="hasGeneratedDraft" v-model="contentForm.generated_title" />
+                                    <input v-else v-model="contentForm.base_title" />
                                 </div>
                                 <div>
                                     <label>Description style</label>
@@ -467,8 +515,19 @@ const changePerPage = (perPage) => {
                                 </div>
                             </div>
                             <div class="mt-4">
-                                <label>Basic product details from customer</label>
-                                <textarea v-model="contentForm.base_description" class="min-h-28" placeholder="Example: 925 silver hoop earrings, lightweight, daily wear, gift box included if true..." />
+                                <label>{{ hasGeneratedDraft ? 'AI description to review' : 'Current product details' }}</label>
+                                <textarea
+                                    v-if="hasGeneratedDraft"
+                                    v-model="contentForm.generated_description"
+                                    class="min-h-36"
+                                    placeholder="Review the AI version here before pushing it live."
+                                />
+                                <textarea
+                                    v-else
+                                    v-model="contentForm.base_description"
+                                    class="min-h-28"
+                                    placeholder="Example: 925 silver hoop earrings, lightweight, daily wear, gift box included if true..."
+                                />
                             </div>
 
                             <div class="mt-3 rounded-md border border-zinc-200 bg-white p-3 text-sm">
@@ -483,7 +542,11 @@ const changePerPage = (perPage) => {
                                 <button class="btn btn-primary" type="button" :disabled="generatingContent || !hasEnoughCredits" @click="generateContent">
                                     <LoaderCircle v-if="generatingContent" class="size-4 animate-spin" />
                                     <Sparkles v-else class="size-4" />
-                                    Generate title and description
+                                    {{ hasGeneratedDraft ? 'Generate another version' : 'Generate title and description' }}
+                                </button>
+                                <button v-if="hasGeneratedDraft" class="btn btn-secondary" type="button" :disabled="pushingContent" @click="restoreOriginalContent">
+                                    <Undo2 class="size-4" />
+                                    Undo AI version
                                 </button>
                                 <button class="btn btn-secondary" type="button" :disabled="pushingContent || !contentForm.generated_title || !contentForm.generated_description" @click="pushContent(false)">
                                     <LoaderCircle v-if="pushingContent" class="size-4 animate-spin" />
@@ -500,22 +563,17 @@ const changePerPage = (perPage) => {
                             <div v-if="contentError" class="mt-3 rounded-md border border-rose-200 bg-rose-50 p-3 text-sm font-semibold text-rose-800">{{ contentError }}</div>
                             <div v-if="contentStatus" class="mt-3 rounded-md border border-emerald-200 bg-emerald-50 p-3 text-sm font-semibold text-emerald-800">{{ contentStatus }}</div>
 
-                            <div v-if="contentForm.generated_title || contentForm.generated_description" class="mt-5 space-y-4">
-                                <div>
-                                    <label>Generated title</label>
-                                    <input v-model="contentForm.generated_title" />
-                                </div>
-                                <div>
-                                    <label>Generated description</label>
-                                    <textarea v-model="contentForm.generated_description" class="min-h-44 font-mono text-xs" />
+                            <div v-if="hasGeneratedDraft" class="mt-5 space-y-4">
+                                <div class="rounded-md border border-white/80 bg-white p-3 text-xs text-zinc-600">
+                                    This AI version is not live yet. It only updates Shopify after you click <span class="font-semibold text-zinc-950">Push to Shopify</span>.
                                 </div>
                                 <div class="grid gap-4 md:grid-cols-2">
                                     <div>
-                                        <label>Generated SEO title</label>
+                                        <label>SEO title to push</label>
                                         <input v-model="contentForm.generated_seo_title" />
                                     </div>
                                     <div>
-                                        <label>Generated SEO description</label>
+                                        <label>SEO description to push</label>
                                         <textarea v-model="contentForm.generated_seo_description" class="min-h-20" />
                                     </div>
                                 </div>

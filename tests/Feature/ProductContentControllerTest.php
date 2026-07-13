@@ -60,6 +60,8 @@ class ProductContentControllerTest extends TestCase
         ]);
 
         $this->mock(ShopifyService::class, function ($mock): void {
+            $mock->shouldReceive('normalizeDomain')
+                ->andReturn('');
             $mock->shouldReceive('updateProductContent')
                 ->once()
                 ->andReturn([

@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\AIGeneration;
+use App\Models\Blog;
 use App\Models\BlogTopic;
 use App\Models\ShopifyCollection;
 use App\Models\ShopifyStore;
@@ -53,21 +54,24 @@ class BlogTopicController extends Controller
                 ->latest()
                 ->first(['id', 'shopify_store_id', 'status', 'metadata', 'error_message', 'started_at', 'completed_at']),
             'topics' => BlogTopic::query()
-                ->with('store:id,name')
+                ->with(['store:id,name', 'blogs:id,blog_topic_id,title,status'])
+                ->withCount('blogs')
                 ->forAccount($accountId)
                 ->whereNotIn('status', ['approved', 'rejected'])
                 ->latest()
                 ->paginate(20)
                 ->withQueryString(),
             'approvedTopics' => BlogTopic::query()
-                ->with('store:id,name')
+                ->with(['store:id,name', 'blogs:id,blog_topic_id,title,status'])
+                ->withCount('blogs')
                 ->forAccount($accountId)
                 ->where('status', 'approved')
                 ->latest()
                 ->paginate(10, ['*'], 'approved_page')
                 ->withQueryString(),
             'rejectedTopics' => BlogTopic::query()
-                ->with('store:id,name')
+                ->with(['store:id,name', 'blogs:id,blog_topic_id,title,status'])
+                ->withCount('blogs')
                 ->forAccount($accountId)
                 ->where('status', 'rejected')
                 ->latest()
@@ -213,17 +217,17 @@ class BlogTopicController extends Controller
 
         if ($request->boolean('generate_blog')) {
             try {
-                app(BlogGenerationService::class)->generateFromTopic($topic->fresh(), $request->user());
+                $blog = app(BlogGenerationService::class)->generateFromTopic($topic->fresh(), $request->user());
             } catch (Throwable $exception) {
                 return back()->withErrors([
                     'topics' => $exception->getMessage(),
                 ]);
             }
 
-            return back()->with('status', 'Topic approved and blog draft generated.');
+            return redirect()->route('blogs.edit', $blog)->with('status', 'Topic saved and blog draft generated. Continue with the blog body next.');
         }
 
-        return back()->with('status', 'Topic approved.');
+        return back()->with('status', 'Topic moved to Ready to write.');
     }
 
     public function reject(BlogTopic $topic): RedirectResponse
@@ -233,7 +237,7 @@ class BlogTopicController extends Controller
 
         $topic->update(['status' => 'rejected']);
 
-        return back()->with('status', 'Topic rejected.');
+        return back()->with('status', 'Topic skipped.');
     }
 
     public function generateBlog(Request $request, BlogTopic $topic): RedirectResponse
@@ -249,15 +253,21 @@ class BlogTopicController extends Controller
             ]);
         }
 
+        $existingBlog = $topic->blogs()->latest('id')->first();
+
+        if ($existingBlog instanceof Blog) {
+            return redirect()->route('blogs.edit', $existingBlog)->with('status', 'A blog draft already exists for this topic. We opened it for you.');
+        }
+
         try {
-            app(BlogGenerationService::class)->generateFromTopic($topic, $request->user());
+            $blog = app(BlogGenerationService::class)->generateFromTopic($topic, $request->user());
         } catch (Throwable $exception) {
             return back()->withErrors([
                 'topics' => $exception->getMessage(),
             ]);
         }
 
-        return back()->with('status', 'Blog draft generated.');
+        return redirect()->route('blogs.edit', $blog)->with('status', 'Blog draft generated. Continue with the blog body next.');
     }
 
     public function generateSelectedBlogs(Request $request): RedirectResponse

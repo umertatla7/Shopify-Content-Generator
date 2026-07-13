@@ -7,9 +7,11 @@ use App\Models\AccountUser;
 use App\Models\Role;
 use App\Models\ShopifyStore;
 use App\Models\User;
+use App\Notifications\NewShopifySignupNotification;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Notification;
 use Tests\TestCase;
 
 class ShopifyInstallControllerTest extends TestCase
@@ -146,6 +148,8 @@ class ShopifyInstallControllerTest extends TestCase
     {
         config()->set('services.shopify.public_app_api_key', 'shopify_key');
         config()->set('services.shopify.public_app_client_secret', 'shopify_secret');
+        config()->set('services.app_review.support_email', 'support@growshophigh.com');
+        Notification::fake();
 
         Http::fake([
             'https://acme.myshopify.com/admin/oauth/access_token' => Http::response([
@@ -207,6 +211,14 @@ class ShopifyInstallControllerTest extends TestCase
         $this->assertSame(['read_products', 'write_products'], $store->credential->scopes);
 
         $this->assertAuthenticatedAs($user);
+
+        Notification::assertSentOnDemand(NewShopifySignupNotification::class, function ($notification, $channels, $notifiable) use ($user, $store): bool {
+            return in_array('mail', $channels, true)
+                && $notifiable->routes['mail'] === 'support@growshophigh.com'
+                && $notification->toMail($notifiable)->subject === 'New GrowShopHigh Shopify signup'
+                && $user->email === 'owner@acme.com'
+                && $store->shop_domain === 'acme.myshopify.com';
+        });
     }
 
     public function test_shopify_oauth_callback_connects_store_for_existing_account_user(): void

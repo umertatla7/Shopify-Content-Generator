@@ -2,6 +2,7 @@
 import { computed } from 'vue';
 import { Head, Link, router } from '@inertiajs/vue3';
 import AppLayout from '@/Layouts/AppLayout.vue';
+import InfoHint from '@/Components/InfoHint.vue';
 import { ArrowRight, BadgeCheck, CreditCard, RefreshCw, ShoppingBag, Sparkles } from 'lucide-vue-next';
 
 const props = defineProps({
@@ -13,7 +14,7 @@ const props = defineProps({
     checklist: Object,
 });
 
-const visiblePlans = computed(() => props.plans.filter((plan) => Number(plan.monthly_price) > 0));
+const visiblePlans = computed(() => props.plans);
 const currentPlan = computed(() => props.plans.find((plan) => plan.key === props.currentPlanKey) ?? props.plans[0] ?? null);
 const catalogCount = computed(() => (
     Number(props.primaryStore?.products_count ?? 0)
@@ -190,18 +191,22 @@ const syncStore = () => {
                             <CreditCard class="size-5" />
                         </div>
                         <div class="min-w-0">
-                            <h3 class="text-base font-bold text-zinc-950">Choose your starting plan</h3>
+                            <div class="flex items-center gap-2">
+                                <h3 class="text-base font-bold text-zinc-950">Choose your starting plan</h3>
+                                <InfoHint text="Each package uses Shopify-managed billing. Pick the level that matches how much content and reporting you want after the first sync." />
+                            </div>
                             <p class="mt-1 text-sm text-zinc-600">
                                 You can review plans now, but the workspace stays focused on sync until your store data lands here.
                             </p>
                         </div>
                     </div>
 
-                    <div class="mt-4 space-y-3">
+                    <div class="mt-4 grid gap-4 xl:grid-cols-3">
                         <div
                             v-for="plan in visiblePlans"
                             :key="plan.id"
-                            class="flex flex-col gap-3 rounded-xl border border-zinc-200 p-4 lg:flex-row lg:items-center lg:justify-between"
+                            class="rounded-xl border border-zinc-200 p-4"
+                            :class="plan.key === props.currentPlanKey ? 'ring-2 ring-teal-200' : ''"
                         >
                             <div class="min-w-0">
                                 <div class="flex items-center gap-2">
@@ -220,8 +225,23 @@ const syncStore = () => {
                                 </div>
                             </div>
 
+                            <div class="mt-4 rounded-xl bg-zinc-50 p-3 text-sm text-zinc-600">
+                                <div class="flex items-center justify-between gap-3">
+                                    <span>Product descriptions</span>
+                                    <span class="font-semibold text-zinc-950">{{ formatLimit(plan.product_description_limit, 'Included') }}</span>
+                                </div>
+                                <div class="mt-2 flex items-center justify-between gap-3">
+                                    <span>Image optimization</span>
+                                    <span class="font-semibold text-zinc-950">{{ formatLimit(plan.monthly_image_optimization_limit) }}</span>
+                                </div>
+                                <div class="mt-2 flex items-center justify-between gap-3">
+                                    <span>Tracked keywords</span>
+                                    <span class="font-semibold text-zinc-950">{{ formatLimit(plan.tracked_keyword_limit) }}</span>
+                                </div>
+                            </div>
+
                             <button
-                                class="btn shrink-0"
+                                class="btn mt-4 w-full"
                                 :class="plan.key === props.currentPlanKey ? 'btn-secondary' : 'btn-primary'"
                                 type="button"
                                 :disabled="plan.key === props.currentPlanKey"
