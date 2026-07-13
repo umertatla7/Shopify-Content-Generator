@@ -33,6 +33,10 @@ import {
 
 const props = defineProps({
     blog: Object,
+    maxBlogWordCount: {
+        type: Number,
+        default: 1500,
+    },
 });
 
 const inferWordTarget = (value) => {
@@ -42,11 +46,14 @@ const inferWordTarget = (value) => {
         .filter((item) => Number.isFinite(item) && item > 0);
 
     if (!numbers.length) {
-        return 1200;
+        return Math.min(1200, props.maxBlogWordCount || 1500);
     }
 
-    return Math.max(300, Math.min(1500, numbers[numbers.length - 1]));
+    return Math.max(300, Math.min(props.maxBlogWordCount || 1500, numbers[numbers.length - 1]));
 };
+
+const wordCountOptions = computed(() => [600, 800, 1000, 1200, 1500]
+    .filter((value) => value <= (props.maxBlogWordCount || 1500)));
 
 const editor = ref(null);
 const secondaryKeywordsText = ref((props.blog.secondary_keywords ?? []).join('\n'));
@@ -70,7 +77,10 @@ const form = useForm({
     faq: props.blog.faq ?? [],
     internal_links: props.blog.internal_links ?? [],
     product_links: props.blog.product_links ?? [],
-    target_word_count: props.blog.payload?.target_word_count ?? inferWordTarget(props.blog.topic?.estimated_article_size),
+    target_word_count: Math.min(
+        props.maxBlogWordCount || 1500,
+        props.blog.payload?.target_word_count ?? inferWordTarget(props.blog.topic?.estimated_article_size),
+    ),
     status: props.blog.status ?? 'draft',
 });
 
@@ -466,11 +476,7 @@ const createImageBrief = () => router.post(`/blogs/${props.blog.id}/image`, {}, 
                             <div class="flex min-w-44 items-center gap-2">
                                 <label class="shrink-0 text-xs font-semibold uppercase text-zinc-500">Words</label>
                                 <select v-model="form.target_word_count" class="h-9 py-1 text-sm" title="Choose target word count">
-                                    <option :value="600">600</option>
-                                    <option :value="800">800</option>
-                                    <option :value="1000">1000</option>
-                                    <option :value="1200">1200</option>
-                                    <option :value="1500">1500</option>
+                                    <option v-for="value in wordCountOptions" :key="value" :value="value">{{ value }}</option>
                                 </select>
                             </div>
                             <div class="flex min-w-52 items-center gap-2">

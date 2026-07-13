@@ -33,7 +33,7 @@ class OnboardingController extends Controller
         return Inertia::render('Onboarding/Index', [
             'plans' => Plan::query()
                 ->where('is_active', true)
-                ->orderByRaw("case `key` when 'free' then 1 when 'growth' then 2 when 'pro' then 3 else 99 end")
+                ->orderByRaw("case `key` when 'free' then 1 when 'starter' then 2 when 'growth' then 3 when 'pro' then 4 else 99 end")
                 ->orderBy('id')
                 ->get(),
             'currentPlanKey' => $account?->plan_key ?? 'free',

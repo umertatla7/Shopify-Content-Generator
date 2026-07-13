@@ -374,12 +374,20 @@ class BlogGenerationService
     private function targetWordCount(Blog $blog, array $options): int
     {
         $requested = (int) ($options['target_word_count'] ?? ($blog->payload['target_word_count'] ?? 0));
+        $planCap = $this->maxWordCountForAccount($blog->account_id);
 
         if ($requested > 0) {
-            return max(300, min(1500, $requested));
+            return max(300, min($planCap, $requested));
         }
 
-        return min(1500, $this->estimatedWords($blog->topic?->estimated_article_size));
+        return min($planCap, $this->estimatedWords($blog->topic?->estimated_article_size));
+    }
+
+    private function maxWordCountForAccount(int $accountId): int
+    {
+        $plan = $this->planLimits->planFor($accountId);
+
+        return max(300, min(1500, (int) ($plan?->max_blog_word_count ?? 1500)));
     }
 
     private function productContext($store, int $limit): array

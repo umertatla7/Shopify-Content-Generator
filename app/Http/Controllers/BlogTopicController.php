@@ -10,6 +10,7 @@ use App\Models\ShopifyStore;
 use App\Services\BlogGenerationService;
 use App\Services\BlogTopicService;
 use App\Services\CreditService;
+use App\Services\PlanLimitService;
 use App\Support\PlanFeatureGate;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -80,7 +81,7 @@ class BlogTopicController extends Controller
         ]);
     }
 
-    public function generate(Request $request, ShopifyStore $store, BlogTopicService $topics, CreditService $credits): RedirectResponse
+    public function generate(Request $request, ShopifyStore $store, BlogTopicService $topics, CreditService $credits, PlanLimitService $planLimits): RedirectResponse
     {
         $this->authorize('create', BlogTopic::class);
         $this->authorize('view', $store);
@@ -130,9 +131,10 @@ class BlogTopicController extends Controller
         $validated['intent_label'] = $this->intentLabel($validated['intent'] ?? null);
 
         try {
+            $planLimits->ensureWithinLimit($store->account, 'topics', (int) $validated['count']);
             $credits->ensure($store->account, $credits->topicGenerationCost((int) $validated['count']), 'topic generation');
         } catch (RuntimeException $exception) {
-            return back()->withErrors(['credits' => $exception->getMessage()]);
+            return back()->withErrors(['topics' => $exception->getMessage()]);
         }
 
         try {

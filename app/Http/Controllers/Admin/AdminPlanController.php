@@ -19,7 +19,7 @@ class AdminPlanController extends Controller
 
         return Inertia::render('Admin/Plans/Index', [
             'plans' => Plan::query()
-                ->orderByRaw("case `key` when 'free' then 1 when 'growth' then 2 when 'pro' then 3 else 99 end")
+                ->orderByRaw("case `key` when 'free' then 1 when 'starter' then 2 when 'growth' then 3 when 'pro' then 4 else 99 end")
                 ->orderBy('id')
                 ->get(),
             'featureOptions' => PlanFeatureGate::featureOptions(),
@@ -54,9 +54,11 @@ class AdminPlanController extends Controller
             'monthly_price' => ['required', 'numeric', 'min:0', 'max:1000000'],
             'trial_days' => ['required', 'integer', 'min:0', 'max:365'],
             'monthly_blog_limit' => ['nullable', 'integer', 'min:0', 'max:1000000'],
+            'monthly_topic_limit' => ['nullable', 'integer', 'min:0', 'max:1000000'],
             'monthly_ai_token_limit' => ['nullable', 'integer', 'min:0', 'max:100000000'],
             'monthly_credit_allowance' => ['required', 'integer', 'min:0', 'max:10000000'],
             'word_limit_estimate' => ['nullable', 'integer', 'min:0', 'max:100000000'],
+            'max_blog_word_count' => ['nullable', 'integer', 'min:300', 'max:1500'],
             'store_limit' => ['required', 'integer', 'min:0', 'max:100000'],
             'user_limit' => ['nullable', 'integer', 'min:0', 'max:100000'],
             'product_description_limit' => ['nullable', 'integer', 'min:0', 'max:1000000'],

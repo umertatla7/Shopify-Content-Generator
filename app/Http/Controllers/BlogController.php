@@ -6,6 +6,7 @@ use App\Models\Blog;
 use App\Models\BlogComment;
 use App\Models\ShopifyStore;
 use App\Services\BlogGenerationService;
+use App\Services\PlanLimitService;
 use App\Services\SEOScoringService;
 use App\Services\Shopify\ShopifySyncService;
 use App\Services\Shopify\ShopifyService;
@@ -73,14 +74,19 @@ class BlogController extends Controller
 
         abort_unless(PlanFeatureGate::moduleAccess(request()->user()->currentAccount)['blogs'], 403);
 
+        $maxBlogWordCount = max(300, min(1500, (int) (app(PlanLimitService::class)->planFor(request()->user()->currentAccount)?->max_blog_word_count ?? 1500)));
+
         return Inertia::render('Blogs/Edit', [
             'blog' => $blog->load(['store:id,name,brand_tone,timezone', 'topic', 'assignee:id,name', 'comments.user:id,name', 'revisions.user:id,name']),
+            'maxBlogWordCount' => $maxBlogWordCount,
         ]);
     }
 
     public function update(Request $request, Blog $blog, BlogGenerationService $revisions, SEOScoringService $seo): RedirectResponse
     {
         $this->authorize('update', $blog);
+
+        $maxBlogWordCount = max(300, min(1500, (int) (app(PlanLimitService::class)->planFor($request->user()->currentAccount)?->max_blog_word_count ?? 1500)));
 
         $validated = $request->validate([
             'title' => ['required', 'string', 'max:255'],
@@ -98,7 +104,7 @@ class BlogController extends Controller
             'faq' => ['nullable', 'array'],
             'internal_links' => ['nullable', 'array'],
             'product_links' => ['nullable', 'array'],
-            'target_word_count' => ['nullable', 'integer', 'min:300', 'max:1500'],
+            'target_word_count' => ['nullable', 'integer', 'min:300', 'max:'.$maxBlogWordCount],
             'status' => ['nullable', 'in:draft,needs_review,approved,scheduled,published,failed,rejected'],
             'assigned_to' => ['nullable', 'integer', 'exists:users,id'],
         ]);

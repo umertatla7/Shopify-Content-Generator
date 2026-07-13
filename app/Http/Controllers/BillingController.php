@@ -25,7 +25,7 @@ class BillingController extends Controller
         $primaryStore = $this->primaryStore($request);
         $plans = Plan::query()
             ->where('is_active', true)
-            ->orderByRaw("case `key` when 'free' then 1 when 'growth' then 2 when 'pro' then 3 else 99 end")
+            ->orderByRaw("case `key` when 'free' then 1 when 'starter' then 2 when 'growth' then 3 when 'pro' then 4 else 99 end")
             ->orderBy('id')
             ->get();
         $paidPlans = $plans->filter(fn (Plan $plan) => (float) $plan->monthly_price > 0);

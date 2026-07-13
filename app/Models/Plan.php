@@ -16,6 +16,15 @@ class Plan extends Model
             'is_active' => 'boolean',
             'monthly_price' => 'decimal:2',
             'trial_days' => 'integer',
+            'monthly_blog_limit' => 'integer',
+            'monthly_topic_limit' => 'integer',
+            'monthly_credit_allowance' => 'integer',
+            'product_description_limit' => 'integer',
+            'collection_description_limit' => 'integer',
+            'monthly_seo_report_limit' => 'integer',
+            'monthly_ai_visibility_report_limit' => 'integer',
+            'tracked_keyword_limit' => 'integer',
+            'max_blog_word_count' => 'integer',
         ];
     }
 

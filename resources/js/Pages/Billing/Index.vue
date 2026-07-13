@@ -33,6 +33,26 @@ const limitLabel = (value, unlimitedLabel = 'Unlimited') => {
     return Number(value).toLocaleString();
 };
 
+const implementedFeatureLabels = {
+    product_descriptions: 'Product content generation',
+    collection_descriptions: 'Collection content generation',
+    monthly_blog_generation: 'Topic ideas and blog writing',
+    store_audit: 'Store Audit',
+    basic_store_audit: 'Store Audit',
+    seo_reports: 'AI Store Analysis',
+    ai_visibility: 'AI Visibility',
+    rank_tracking: 'Keyword Tracking',
+    all_features: 'All available modules',
+};
+
+const planHighlights = (plan) => {
+    const labels = (plan?.features ?? [])
+        .map((feature) => implementedFeatureLabels[feature])
+        .filter(Boolean);
+
+    return [...new Set(labels)].slice(0, 6);
+};
+
 const formatDate = (value) => {
     if (!value) return 'Not available';
 
@@ -355,7 +375,7 @@ const resumeApproval = () => {
                 </article>
             </section>
 
-            <section class="grid gap-4 xl:grid-cols-3">
+            <section class="grid gap-4 lg:grid-cols-2">
                 <article
                     v-for="plan in visiblePlans"
                     :key="plan.id"
@@ -385,19 +405,27 @@ const resumeApproval = () => {
                                 <span class="font-semibold text-zinc-950">{{ limitLabel(plan.monthly_credit_allowance) }}</span>
                             </div>
                             <div class="flex items-center justify-between gap-3">
-                                <span>Product descriptions</span>
+                                <span>Products / month</span>
                                 <span class="font-semibold text-zinc-950">{{ limitLabel(plan.product_description_limit) }}</span>
+                            </div>
+                            <div class="flex items-center justify-between gap-3">
+                                <span>Collections / month</span>
+                                <span class="font-semibold text-zinc-950">{{ limitLabel(plan.collection_description_limit) }}</span>
                             </div>
                             <div class="flex items-center justify-between gap-3">
                                 <span>Blogs / month</span>
                                 <span class="font-semibold text-zinc-950">{{ limitLabel(plan.monthly_blog_limit) }}</span>
                             </div>
                             <div class="flex items-center justify-between gap-3">
-                                <span>SEO reports</span>
+                                <span>Topics / month</span>
+                                <span class="font-semibold text-zinc-950">{{ limitLabel(plan.monthly_topic_limit, '0') }}</span>
+                            </div>
+                            <div class="flex items-center justify-between gap-3">
+                                <span>Store audits</span>
                                 <span class="font-semibold text-zinc-950">{{ limitLabel(plan.monthly_seo_report_limit) }}</span>
                             </div>
                             <div class="flex items-center justify-between gap-3">
-                                <span>AI visibility reports</span>
+                                <span>AI visibility refreshes</span>
                                 <span class="font-semibold text-zinc-950">{{ limitLabel(plan.monthly_ai_visibility_report_limit) }}</span>
                             </div>
                             <div class="flex items-center justify-between gap-3">
@@ -405,12 +433,21 @@ const resumeApproval = () => {
                                 <span class="font-semibold text-zinc-950">{{ limitLabel(plan.tracked_keyword_limit) }}</span>
                             </div>
                             <div class="flex items-center justify-between gap-3">
-                                <span>Image optimization</span>
-                                <span class="font-semibold text-zinc-950">{{ limitLabel(plan.monthly_image_optimization_limit) }}</span>
+                                <span>Max blog words</span>
+                                <span class="font-semibold text-zinc-950">{{ limitLabel(plan.max_blog_word_count, '1500') }}</span>
                             </div>
-                            <div class="flex items-center justify-between gap-3">
-                                <span>Image alt text</span>
-                                <span class="font-semibold text-zinc-950">{{ limitLabel(plan.monthly_image_alt_text_limit) }}</span>
+                        </div>
+
+                        <div v-if="planHighlights(plan).length" class="rounded-md bg-zinc-50 p-3 text-sm text-zinc-600">
+                            <div class="mb-2 text-xs font-semibold uppercase tracking-wide text-zinc-500">Included modules</div>
+                            <div class="grid gap-2">
+                                <div
+                                    v-for="feature in planHighlights(plan)"
+                                    :key="feature"
+                                    class="rounded-md border border-zinc-200 bg-white px-3 py-2"
+                                >
+                                    {{ feature }}
+                                </div>
                             </div>
                         </div>
 

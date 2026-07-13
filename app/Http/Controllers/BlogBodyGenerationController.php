@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\Blog;
 use App\Services\BlogGenerationService;
+use App\Services\PlanLimitService;
 use App\Support\PlanFeatureGate;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
@@ -12,10 +13,12 @@ use Throwable;
 
 class BlogBodyGenerationController extends Controller
 {
-    public function __invoke(Request $request, Blog $blog, BlogGenerationService $blogs): RedirectResponse|JsonResponse
+    public function __invoke(Request $request, Blog $blog, BlogGenerationService $blogs, PlanLimitService $planLimits): RedirectResponse|JsonResponse
     {
         $this->authorize('update', $blog);
         abort_unless(PlanFeatureGate::moduleAccess($request->user()->currentAccount)['blogs'], 403);
+
+        $maxBlogWordCount = max(300, min(1500, (int) ($planLimits->planFor($request->user()->currentAccount)?->max_blog_word_count ?? 1500)));
 
         $validated = $request->validate([
             'title' => ['sometimes', 'required', 'string', 'max:255'],
@@ -27,7 +30,7 @@ class BlogBodyGenerationController extends Controller
             'primary_keyword' => ['sometimes', 'nullable', 'string', 'max:255'],
             'secondary_keywords' => ['sometimes', 'nullable', 'array'],
             'tone' => ['sometimes', 'nullable', 'string', 'max:255'],
-            'target_word_count' => ['sometimes', 'nullable', 'integer', 'min:300', 'max:1500'],
+            'target_word_count' => ['sometimes', 'nullable', 'integer', 'min:300', 'max:'.$maxBlogWordCount],
         ]);
 
         $blogUpdates = collect($validated)->except('tone')->all();

@@ -17,9 +17,11 @@ const newForm = useForm({
     monthly_price: 0,
     trial_days: 14,
     monthly_blog_limit: 1,
+    monthly_topic_limit: 4,
     monthly_ai_token_limit: 150000,
-    monthly_credit_allowance: 500,
-    word_limit_estimate: 5000,
+    monthly_credit_allowance: 250,
+    word_limit_estimate: 3000,
+    max_blog_word_count: 1000,
     store_limit: 1,
     user_limit: 1,
     product_description_limit: 25,
@@ -75,9 +77,11 @@ const resetNewForm = () => {
         monthly_price: 0,
         trial_days: 14,
         monthly_blog_limit: 1,
+        monthly_topic_limit: 4,
         monthly_ai_token_limit: 150000,
-        monthly_credit_allowance: 500,
-        word_limit_estimate: 5000,
+        monthly_credit_allowance: 250,
+        word_limit_estimate: 3000,
+        max_blog_word_count: 1000,
         store_limit: 1,
         user_limit: 1,
         product_description_limit: 25,
@@ -118,9 +122,11 @@ const savePlan = (plan) => {
         monthly_price: form.monthly_price,
         trial_days: form.trial_days,
         monthly_blog_limit: form.monthly_blog_limit,
+        monthly_topic_limit: form.monthly_topic_limit,
         monthly_ai_token_limit: form.monthly_ai_token_limit,
         monthly_credit_allowance: form.monthly_credit_allowance,
         word_limit_estimate: form.word_limit_estimate,
+        max_blog_word_count: form.max_blog_word_count,
         store_limit: form.store_limit,
         user_limit: form.user_limit,
         product_description_limit: form.product_description_limit,
@@ -139,6 +145,7 @@ const savePlan = (plan) => {
 
 const planTone = (key) => ({
     free: 'border-zinc-200 bg-white',
+    starter: 'border-amber-200 bg-amber-50/40',
     growth: 'border-teal-200 bg-teal-50/40',
     pro: 'border-indigo-200 bg-indigo-50/40',
 }[key] ?? 'border-zinc-200 bg-white');
@@ -188,6 +195,10 @@ const planTone = (key) => ({
                     <input v-model="newForm.monthly_blog_limit" type="number" min="0" />
                 </div>
                 <div>
+                    <label>Topics / month</label>
+                    <input v-model="newForm.monthly_topic_limit" type="number" min="0" />
+                </div>
+                <div>
                     <label>Products / month</label>
                     <input v-model="newForm.product_description_limit" type="number" min="0" />
                 </div>
@@ -200,15 +211,19 @@ const planTone = (key) => ({
                     <input v-model="newForm.monthly_seo_report_limit" type="number" min="0" />
                 </div>
                 <div>
+                    <label>Max blog words</label>
+                    <input v-model="newForm.max_blog_word_count" type="number" min="300" max="1500" step="100" />
+                </div>
+                <div>
                     <label>AI visibility / month</label>
                     <input v-model="newForm.monthly_ai_visibility_report_limit" type="number" min="0" />
                 </div>
                 <div>
-                    <label>Image optimization / month</label>
+                    <label>Image optimization / month (future)</label>
                     <input v-model="newForm.monthly_image_optimization_limit" type="number" min="0" />
                 </div>
                 <div>
-                    <label>Image alt text / month</label>
+                    <label>Image alt text / month (future)</label>
                     <input v-model="newForm.monthly_image_alt_text_limit" type="number" min="0" />
                 </div>
                 <div>
@@ -307,7 +322,7 @@ const planTone = (key) => ({
                         </div>
                     </div>
 
-                    <div class="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
+                    <div class="grid gap-4 md:grid-cols-2 xl:grid-cols-6">
                         <div>
                             <label>Monthly credits</label>
                             <input v-model="planForms[plan.id].monthly_credit_allowance" type="number" min="0" />
@@ -321,6 +336,10 @@ const planTone = (key) => ({
                             <input v-model="planForms[plan.id].word_limit_estimate" type="number" min="0" />
                         </div>
                         <div>
+                            <label>Max blog words</label>
+                            <input v-model="planForms[plan.id].max_blog_word_count" type="number" min="300" max="1500" step="100" />
+                        </div>
+                        <div>
                             <label>Store limit</label>
                             <input v-model="planForms[plan.id].store_limit" type="number" min="0" />
                         </div>
@@ -332,10 +351,14 @@ const planTone = (key) => ({
 
                     <div>
                         <h4 class="text-sm font-semibold text-zinc-900">Monthly usage limits</h4>
-                        <div class="mt-3 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+                        <div class="mt-3 grid gap-4 md:grid-cols-2 xl:grid-cols-5">
                             <div>
                                 <label>Blogs</label>
                                 <input v-model="planForms[plan.id].monthly_blog_limit" type="number" min="0" />
+                            </div>
+                            <div>
+                                <label>Topics</label>
+                                <input v-model="planForms[plan.id].monthly_topic_limit" type="number" min="0" />
                             </div>
                             <div>
                                 <label>Product descriptions</label>
@@ -354,11 +377,11 @@ const planTone = (key) => ({
                                 <input v-model="planForms[plan.id].monthly_ai_visibility_report_limit" type="number" min="0" />
                             </div>
                             <div>
-                                <label>Image optimization</label>
+                                <label>Image optimization (future)</label>
                                 <input v-model="planForms[plan.id].monthly_image_optimization_limit" type="number" min="0" />
                             </div>
                             <div>
-                                <label>Image alt text</label>
+                                <label>Image alt text (future)</label>
                                 <input v-model="planForms[plan.id].monthly_image_alt_text_limit" type="number" min="0" />
                             </div>
                             <div>

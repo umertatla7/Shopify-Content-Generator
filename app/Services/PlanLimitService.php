@@ -105,6 +105,13 @@ class PlanLimitService
     private function used(Account $account, string $metric, array $bounds): int
     {
         return match ($metric) {
+            'topics' => UsageLog::query()
+                ->where('account_id', $account->id)
+                ->where('type', 'credit_usage')
+                ->where('metadata->action', 'topic_generation')
+                ->whereBetween('created_at', [$bounds['start'], $bounds['end']])
+                ->get()
+                ->sum(fn (UsageLog $log): int => (int) data_get($log->metadata, 'topic_count', 0)),
             'product_descriptions' => UsageLog::query()
                 ->where('account_id', $account->id)
                 ->where('type', 'credit_usage')
@@ -148,6 +155,12 @@ class PlanLimitService
     private function definitions(): array
     {
         return [
+            'topics' => [
+                'label' => 'Topics',
+                'noun' => 'topic generations',
+                'limit_field' => 'monthly_topic_limit',
+                'period' => 'month',
+            ],
             'product_descriptions' => [
                 'label' => 'Product descriptions',
                 'noun' => 'product description generations',

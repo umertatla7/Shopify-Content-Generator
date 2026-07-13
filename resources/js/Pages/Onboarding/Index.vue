@@ -14,7 +14,7 @@ const props = defineProps({
     checklist: Object,
 });
 
-const visiblePlans = computed(() => props.plans);
+const visiblePlans = computed(() => props.plans.filter((plan) => Number(plan.monthly_price) > 0));
 const currentPlan = computed(() => props.plans.find((plan) => plan.key === props.currentPlanKey) ?? props.plans[0] ?? null);
 const catalogCount = computed(() => (
     Number(props.primaryStore?.products_count ?? 0)
@@ -34,6 +34,26 @@ const trialLabel = (plan) => Number(plan?.trial_days || 0) > 0 ? `${Number(plan.
 const formatLimit = (value, emptyLabel = 'Unlimited') => {
     if (value === null || value === undefined) return emptyLabel;
     return Number(value).toLocaleString();
+};
+
+const implementedFeatureLabels = {
+    product_descriptions: 'Product content generation',
+    collection_descriptions: 'Collection content generation',
+    monthly_blog_generation: 'Topic ideas and blog writing',
+    store_audit: 'Store Audit',
+    basic_store_audit: 'Store Audit',
+    seo_reports: 'AI Store Analysis',
+    ai_visibility: 'AI Visibility',
+    rank_tracking: 'Keyword Tracking',
+    all_features: 'All available modules',
+};
+
+const planHighlights = (plan) => {
+    const labels = (plan?.features ?? [])
+        .map((feature) => implementedFeatureLabels[feature])
+        .filter(Boolean);
+
+    return [...new Set(labels)].slice(0, 5);
 };
 
 const subscribe = (plan) => router.post(`/billing/plans/${plan.id}/subscribe`, {}, { preserveScroll: true });
@@ -201,7 +221,7 @@ const syncStore = () => {
                         </div>
                     </div>
 
-                    <div class="mt-4 grid gap-4 xl:grid-cols-3">
+                    <div class="mt-4 grid gap-4 lg:grid-cols-3">
                         <div
                             v-for="plan in visiblePlans"
                             :key="plan.id"
@@ -221,22 +241,45 @@ const syncStore = () => {
                                     <span v-if="trialLabel(plan)">{{ trialLabel(plan) }}, </span>
                                     {{ formatLimit(plan.monthly_credit_allowance) }} credits,
                                     {{ formatLimit(plan.monthly_blog_limit) }} blogs/month,
-                                    {{ formatLimit(plan.monthly_ai_visibility_report_limit) }} AI visibility reports
+                                    {{ formatLimit(plan.monthly_topic_limit, '0') }} topics/month
                                 </div>
                             </div>
 
                             <div class="mt-4 rounded-xl bg-zinc-50 p-3 text-sm text-zinc-600">
                                 <div class="flex items-center justify-between gap-3">
-                                    <span>Product descriptions</span>
-                                    <span class="font-semibold text-zinc-950">{{ formatLimit(plan.product_description_limit, 'Included') }}</span>
+                                    <span>Products / month</span>
+                                    <span class="font-semibold text-zinc-950">{{ formatLimit(plan.product_description_limit, '0') }}</span>
                                 </div>
                                 <div class="mt-2 flex items-center justify-between gap-3">
-                                    <span>Image optimization</span>
-                                    <span class="font-semibold text-zinc-950">{{ formatLimit(plan.monthly_image_optimization_limit) }}</span>
+                                    <span>Collections / month</span>
+                                    <span class="font-semibold text-zinc-950">{{ formatLimit(plan.collection_description_limit, '0') }}</span>
+                                </div>
+                                <div class="mt-2 flex items-center justify-between gap-3">
+                                    <span>Store audits / month</span>
+                                    <span class="font-semibold text-zinc-950">{{ formatLimit(plan.monthly_seo_report_limit, '0') }}</span>
+                                </div>
+                                <div class="mt-2 flex items-center justify-between gap-3">
+                                    <span>AI visibility refreshes</span>
+                                    <span class="font-semibold text-zinc-950">{{ formatLimit(plan.monthly_ai_visibility_report_limit, '0') }}</span>
                                 </div>
                                 <div class="mt-2 flex items-center justify-between gap-3">
                                     <span>Tracked keywords</span>
                                     <span class="font-semibold text-zinc-950">{{ formatLimit(plan.tracked_keyword_limit) }}</span>
+                                </div>
+                                <div class="mt-2 flex items-center justify-between gap-3">
+                                    <span>Max blog words</span>
+                                    <span class="font-semibold text-zinc-950">{{ formatLimit(plan.max_blog_word_count, '1500') }}</span>
+                                </div>
+                            </div>
+
+                            <div v-if="planHighlights(plan).length" class="mt-4 space-y-2 text-sm text-zinc-600">
+                                <div class="text-xs font-semibold uppercase tracking-wide text-zinc-500">Includes</div>
+                                <div
+                                    v-for="feature in planHighlights(plan)"
+                                    :key="feature"
+                                    class="rounded-lg border border-zinc-200 bg-white px-3 py-2"
+                                >
+                                    {{ feature }}
                                 </div>
                             </div>
 
