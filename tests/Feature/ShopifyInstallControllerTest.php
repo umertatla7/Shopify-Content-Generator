@@ -109,11 +109,12 @@ class ShopifyInstallControllerTest extends TestCase
         $response = $this->get('/shopify/app?shop=umerjewelry.myshopify.com&host='.$host.'&embedded=1');
 
         $response->assertOk();
-        $response->assertSee('Redirecting to Shopify', false);
-        $response->assertSee('https://admin.shopify.com/store/umer-jewelry/apps/shopify_key/shopify/app?', false);
-        $response->assertSee('shop=umerjewelry.myshopify.com', false);
-        $response->assertSee('install_token=', false);
+        $response->assertSee('Opening GrowShopHigh', false);
+        $response->assertSee('/shopify/session', false);
+        $response->assertSee('value="umerjewelry.myshopify.com"', false);
+        $response->assertDontSee('install_token=', false);
         $response->assertDontSee('/shopify/install/start', false);
+        $this->assertGuest();
     }
 
     public function test_shopify_app_for_authenticated_user_redirects_to_onboarding_when_store_has_not_been_synced(): void
@@ -350,11 +351,16 @@ class ShopifyInstallControllerTest extends TestCase
 
         $this->assertNotNull($newStore);
         $this->assertSame(2, Account::query()->count());
-        $this->assertSame($newStore->account_id, $user->current_account_id);
+        $this->assertNotSame($newStore->account_id, $user->fresh()->current_account_id);
         $this->assertDatabaseHas('accounts', [
             'id' => $newStore->account_id,
+        ]);
+        $this->assertDatabaseMissing('accounts', [
+            'id' => $newStore->account_id,
             'owner_id' => $user->id,
-            'billing_email' => 'owner@acme.com',
+        ]);
+        $this->assertDatabaseHas('users', [
+            'email' => 'owner+acme-two@acme.com',
         ]);
     }
 
@@ -407,15 +413,73 @@ class ShopifyInstallControllerTest extends TestCase
         $response->assertOk();
         $response->assertSee('Redirecting back to Shopify', false);
         $this->assertStringContainsString(
-            'https:\/\/admin.shopify.com\/store\/acme\/apps\/shopify_key\/shopify\/app?shop=acme.myshopify.com\u0026host=YWRtaW4uc2hvcGlmeS5jb20vc3RvcmUvYWNtZQ\u0026embedded=1\u0026install_token=',
+            'https:\/\/admin.shopify.com\/store\/acme\/apps\/shopify_key\/shopify\/app?shop=acme.myshopify.com\u0026host=YWRtaW4uc2hvcGlmeS5jb20vc3RvcmUvYWNtZQ\u0026embedded=1',
             $response->getContent()
         );
+        $this->assertStringNotContainsString('install_token=', $response->getContent());
         $this->assertNull(Cache::get('shopify_oauth:nonce123'));
         $this->assertAuthenticated();
     }
 
-    public function test_shopify_app_consumes_embedded_install_token_and_creates_embedded_session(): void
+    public function test_shopify_session_token_creates_embedded_session_for_existing_store(): void
     {
+        config()->set('services.shopify.public_app_api_key', 'shopify_key');
+        config()->set('services.shopify.public_app_client_secret', 'shopify_secret');
+
+        $owner = $this->memberWithStorePermission();
+
+        $store = ShopifyStore::query()->create([
+            'account_id' => $owner->current_account_id,
+            'connected_by' => $owner->id,
+            'name' => 'Umer Store',
+            'shop_domain' => 'umerjewelry.myshopify.com',
+            'shop_url' => 'https://umerjewelry.myshopify.com',
+            'status' => 'connected',
+        ])->credential()->create([
+            'account_id' => $owner->current_account_id,
+            'admin_api_access_token' => 'token',
+            'api_key' => 'shopify_key',
+            'client_secret' => 'shopify_secret',
+            'scopes' => ['read_products', 'write_products'],
+        ]);
+
+        $token = $this->shopifySessionToken('umerjewelry.myshopify.com', 'shopify_key', 'shopify_secret');
+
+        $response = $this->post('/shopify/session', [
+            'shop' => 'umerjewelry.myshopify.com',
+            'host' => 'test-host',
+            'embedded' => '1',
+            'id_token' => $token,
+        ]);
+
+        $response->assertRedirect('/onboarding?shop=umerjewelry.myshopify.com&host=test-host&embedded=1');
+        $this->assertAuthenticatedAs($owner->fresh());
+        $this->assertSame($store->account_id, $owner->fresh()->current_account_id);
+    }
+
+    public function test_shopify_session_token_rejects_wrong_shop(): void
+    {
+        config()->set('services.shopify.public_app_api_key', 'shopify_key');
+        config()->set('services.shopify.public_app_client_secret', 'shopify_secret');
+
+        $token = $this->shopifySessionToken('other.myshopify.com', 'shopify_key', 'shopify_secret');
+
+        $response = $this->post('/shopify/session', [
+            'shop' => 'umerjewelry.myshopify.com',
+            'host' => 'test-host',
+            'embedded' => '1',
+            'id_token' => $token,
+        ]);
+
+        $response->assertSessionHasErrors('shopify');
+        $this->assertGuest();
+    }
+
+    public function test_embedded_request_authenticates_with_a_valid_shopify_session_token_without_a_cookie_session(): void
+    {
+        config()->set('services.shopify.public_app_api_key', 'shopify_key');
+        config()->set('services.shopify.public_app_client_secret', 'shopify_secret');
+
         $owner = $this->memberWithStorePermission();
 
         ShopifyStore::query()->create([
@@ -433,18 +497,83 @@ class ShopifyInstallControllerTest extends TestCase
             'scopes' => ['read_products', 'write_products'],
         ]);
 
-        Cache::put('shopify_embedded_auth:token123', [
-            'user_id' => $owner->id,
-            'account_id' => $owner->current_account_id,
-            'shopify_store_id' => ShopifyStore::query()->where('shop_domain', 'umerjewelry.myshopify.com')->value('id'),
-            'shop' => 'umerjewelry.myshopify.com',
-        ], now()->addMinutes(10));
+        $token = $this->shopifySessionToken('umerjewelry.myshopify.com', 'shopify_key', 'shopify_secret');
 
-        $response = $this->get('/shopify/app?shop=umerjewelry.myshopify.com&host=test-host&embedded=1&install_token=token123');
+        $response = $this
+            ->withHeader('Authorization', 'Bearer '.$token)
+            ->get('/billing?shop=umerjewelry.myshopify.com&host=test-host&embedded=1');
 
-        $response->assertRedirect('/shopify/app?shop=umerjewelry.myshopify.com&host=test-host&embedded=1');
-        $this->assertAuthenticatedAs($owner->fresh());
-        $this->assertNull(Cache::get('shopify_embedded_auth:token123'));
+        $response->assertOk();
+        $response->assertSee('Billing', false);
+        $this->assertAuthenticatedAs($owner);
+    }
+
+    public function test_embedded_request_rejects_an_invalid_shopify_session_token(): void
+    {
+        config()->set('services.shopify.public_app_api_key', 'shopify_key');
+        config()->set('services.shopify.public_app_client_secret', 'shopify_secret');
+
+        $response = $this
+            ->withHeader('Authorization', 'Bearer invalid-session-token')
+            ->get('/billing?shop=umerjewelry.myshopify.com&host=test-host&embedded=1');
+
+        $response
+            ->assertUnauthorized()
+            ->assertJson(['message' => 'Invalid Shopify session token format.']);
+
+        $this->assertGuest();
+    }
+
+    public function test_embedded_session_token_selects_only_its_own_store_account(): void
+    {
+        config()->set('services.shopify.public_app_api_key', 'shopify_key');
+        config()->set('services.shopify.public_app_client_secret', 'shopify_secret');
+
+        $firstOwner = $this->memberWithStorePermission();
+        $firstStore = ShopifyStore::query()->create([
+            'account_id' => $firstOwner->current_account_id,
+            'connected_by' => $firstOwner->id,
+            'name' => 'First Store',
+            'shop_domain' => 'first-store.myshopify.com',
+            'shop_url' => 'https://first-store.myshopify.com',
+            'status' => 'connected',
+        ]);
+        $firstStore->credential()->create([
+            'account_id' => $firstOwner->current_account_id,
+            'admin_api_access_token' => 'first-token',
+            'api_key' => 'shopify_key',
+            'client_secret' => 'shopify_secret',
+            'scopes' => ['read_products'],
+        ]);
+
+        $secondOwner = $this->memberWithStorePermission();
+        $secondStore = ShopifyStore::query()->create([
+            'account_id' => $secondOwner->current_account_id,
+            'connected_by' => $secondOwner->id,
+            'name' => 'Second Store',
+            'shop_domain' => 'second-store.myshopify.com',
+            'shop_url' => 'https://second-store.myshopify.com',
+            'status' => 'connected',
+        ]);
+        $secondStore->credential()->create([
+            'account_id' => $secondOwner->current_account_id,
+            'admin_api_access_token' => 'second-token',
+            'api_key' => 'shopify_key',
+            'client_secret' => 'shopify_secret',
+            'scopes' => ['read_products'],
+        ]);
+
+        $token = $this->shopifySessionToken('second-store.myshopify.com', 'shopify_key', 'shopify_secret');
+
+        $response = $this
+            ->withHeader('Authorization', 'Bearer '.$token)
+            ->get('/billing?shop=first-store.myshopify.com&host=test-host&embedded=1');
+
+        $response->assertOk();
+        $response->assertSee('Second Store', false);
+        $response->assertDontSee('First Store', false);
+        $this->assertSame($firstStore->account_id, $firstOwner->fresh()->current_account_id);
+        $this->assertSame($secondStore->account_id, $secondOwner->fresh()->current_account_id);
     }
 
     public function test_authenticated_requests_switch_current_account_based_on_shop_domain(): void
@@ -497,12 +626,13 @@ class ShopifyInstallControllerTest extends TestCase
         $account = Account::query()->create([
             'owner_id' => $user->id,
             'name' => 'Acme',
-            'slug' => 'acme',
+            'slug' => 'acme-'.$user->id,
             'plan_key' => 'free',
         ]);
 
-        $role = Role::query()->create([
+        $role = Role::query()->firstOrCreate([
             'name' => 'customer_admin',
+        ], [
             'label' => 'Customer Admin',
         ]);
 
@@ -530,5 +660,36 @@ class ShopifyInstallControllerTest extends TestCase
             ->implode('&');
 
         return hash_hmac('sha256', $message, $secret);
+    }
+
+    private function shopifySessionToken(string $shop, string $audience, string $secret): string
+    {
+        $header = ['alg' => 'HS256', 'typ' => 'JWT'];
+        $payload = [
+            'iss' => "https://{$shop}/admin",
+            'dest' => "https://{$shop}",
+            'aud' => $audience,
+            'sub' => 'gid://shopify/User/1',
+            'exp' => time() + 60,
+            'nbf' => time() - 60,
+            'iat' => time(),
+            'jti' => 'test-jti',
+            'sid' => 'test-session',
+        ];
+
+        $segments = [
+            $this->base64UrlEncode(json_encode($header, JSON_THROW_ON_ERROR)),
+            $this->base64UrlEncode(json_encode($payload, JSON_THROW_ON_ERROR)),
+        ];
+
+        $signature = hash_hmac('sha256', implode('.', $segments), $secret, true);
+        $segments[] = $this->base64UrlEncode($signature);
+
+        return implode('.', $segments);
+    }
+
+    private function base64UrlEncode(string $value): string
+    {
+        return rtrim(strtr(base64_encode($value), '+/', '-_'), '=');
     }
 }

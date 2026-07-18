@@ -7,6 +7,7 @@ use App\Models\ActivityLog;
 use App\Models\PublishingLog;
 use App\Models\ShopifyStore;
 use App\Models\ShopifySyncLog;
+use App\Models\ShopifyWebhookDelivery;
 use App\Models\UsageLog;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -74,6 +75,24 @@ class PruneOperationalLogsCommandTest extends TestCase
             'status' => 'success',
         ]);
 
+        $oldWebhook = ShopifyWebhookDelivery::query()->create([
+            'webhook_id' => fake()->uuid(),
+            'topic' => 'app/uninstalled',
+            'shop_domain' => $store->shop_domain,
+            'payload_hash' => hash('sha256', 'old'),
+            'status' => 'processed',
+            'created_at' => $oldTimestamp,
+            'updated_at' => $oldTimestamp,
+        ]);
+
+        $newWebhook = ShopifyWebhookDelivery::query()->create([
+            'webhook_id' => fake()->uuid(),
+            'topic' => 'app/uninstalled',
+            'shop_domain' => $store->shop_domain,
+            'payload_hash' => hash('sha256', 'new'),
+            'status' => 'processed',
+        ]);
+
         $oldUsage = UsageLog::query()->create([
             'account_id' => $account->id,
             'user_id' => $user->id,
@@ -101,6 +120,8 @@ class PruneOperationalLogsCommandTest extends TestCase
         $this->assertDatabaseHas('publishing_logs', ['id' => $newPublishing->id]);
         $this->assertDatabaseMissing('shopify_sync_logs', ['id' => $oldSync->id]);
         $this->assertDatabaseHas('shopify_sync_logs', ['id' => $newSync->id]);
+        $this->assertDatabaseMissing('shopify_webhook_deliveries', ['id' => $oldWebhook->id]);
+        $this->assertDatabaseHas('shopify_webhook_deliveries', ['id' => $newWebhook->id]);
         $this->assertDatabaseMissing('usage_logs', ['id' => $oldUsage->id]);
         $this->assertDatabaseHas('usage_logs', ['id' => $newUsage->id]);
     }

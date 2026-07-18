@@ -17,7 +17,7 @@ class BlogPublishingService
         private readonly UsageTrackingService $usage,
     ) {}
 
-    public function publish(Blog $blog, ?User $user = null): Blog
+    public function publish(Blog $blog, ?User $user = null, bool $throwOnFailure = false): Blog
     {
         if (! $blog->canPublish()) {
             throw new RuntimeException('Only approved, scheduled, or already published blogs can be sent to Shopify.');
@@ -27,6 +27,7 @@ class BlogPublishingService
             throw new RuntimeException('Add and save blog body content before publishing to Shopify.');
         }
 
+        $originalStatus = $blog->status;
         $log = PublishingLog::query()->create([
             'account_id' => $blog->account_id,
             'shopify_store_id' => $blog->shopify_store_id,
@@ -66,7 +67,7 @@ class BlogPublishingService
             ]);
         } catch (Throwable $exception) {
             $blog->update([
-                'status' => Blog::STATUS_FAILED,
+                'status' => $throwOnFailure ? $originalStatus : Blog::STATUS_FAILED,
                 'failure_message' => $exception->getMessage(),
             ]);
 
@@ -74,6 +75,10 @@ class BlogPublishingService
                 'status' => 'failed',
                 'error_message' => $exception->getMessage(),
             ]);
+
+            if ($throwOnFailure) {
+                throw $exception;
+            }
         }
 
         return $blog->refresh();

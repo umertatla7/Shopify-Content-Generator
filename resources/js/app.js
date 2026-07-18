@@ -1,8 +1,21 @@
 import './bootstrap';
 import '../css/app.css';
 
-import { createInertiaApp } from '@inertiajs/vue3';
+import { createInertiaApp, http } from '@inertiajs/vue3';
 import { createApp, h } from 'vue';
+
+http.onRequest(async (config) => {
+    const token = await window.getShopifySessionToken?.();
+
+    if (token) {
+        config.headers = {
+            ...(config.headers || {}),
+            Authorization: `Bearer ${token}`,
+        };
+    }
+
+    return config;
+});
 
 createInertiaApp({
     title: (title) => (title ? `${title} - SEO & AEO Content Generator` : 'SEO & AEO Content Generator'),

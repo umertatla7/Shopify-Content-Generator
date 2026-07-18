@@ -2,8 +2,8 @@
 
 namespace App\Http\Controllers;
 
-use App\Models\ActivityLog;
 use App\Models\Account;
+use App\Models\ActivityLog;
 use App\Models\Plan;
 use App\Models\ShopifyStore;
 use App\Models\Subscription;
@@ -236,7 +236,6 @@ class BillingController extends Controller
         $this->authorizeBilling($request);
 
         $account = $request->user()->currentAccount;
-        $plan = Plan::query()->where('key', $request->string('plan'))->first();
         $primaryStore = $this->primaryStore($request);
 
         if (! $account || ! $primaryStore) {
@@ -246,7 +245,7 @@ class BillingController extends Controller
         }
 
         try {
-            $subscription = $billing->syncAccountSubscription($account, $primaryStore, $plan);
+            $subscription = $billing->syncAccountSubscription($account, $primaryStore);
         } catch (RuntimeException $exception) {
             $this->activity(
                 $request,
@@ -256,7 +255,7 @@ class BillingController extends Controller
                 "Billing confirmation failed: {$exception->getMessage()}",
                 $primaryStore,
                 null,
-                ['plan_key' => $plan?->key]
+                ['requested_plan_key' => $request->string('plan')->toString()]
             );
 
             return redirect()->route('billing.index')->withErrors([

@@ -1,0 +1,18 @@
+client_id = "YOUR_SHOPIFY_PUBLIC_APP_API_KEY"
+name = "GrowShopHigh"
+application_url = "https://app.growshophigh.com/shopify/app"
+embedded = true
+
+[auth]
+redirect_urls = ["https://app.growshophigh.com/shopify/oauth/callback"]
+
+[webhooks]
+api_version = "2026-07"
+
+[[webhooks.subscriptions]]
+compliance_topics = ["customers/data_request", "customers/redact", "shop/redact"]
+uri = "https://app.growshophigh.com/api/webhooks/shopify"
+
+[[webhooks.subscriptions]]
+topics = ["app/uninstalled"]
+uri = "https://app.growshophigh.com/api/webhooks/shopify"

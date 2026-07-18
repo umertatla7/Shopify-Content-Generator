@@ -3,6 +3,8 @@
 namespace App\Models;
 
 use App\Models\Concerns\BelongsToAccount;
+use App\Models\Concerns\SanitizesHtml;
+use Illuminate\Database\Eloquent\Casts\Attribute;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -14,6 +16,7 @@ class Blog extends Model
 {
     use BelongsToAccount;
     use HasFactory;
+    use SanitizesHtml;
     use SoftDeletes;
 
     public const STATUS_DRAFT = 'draft';
@@ -46,6 +49,16 @@ class Blog extends Model
             'approved_at' => 'datetime',
             'featured_image_generated_at' => 'datetime',
         ];
+    }
+
+    protected function body(): Attribute
+    {
+        return $this->sanitizedHtmlAttribute();
+    }
+
+    protected function excerpt(): Attribute
+    {
+        return $this->sanitizedHtmlAttribute();
     }
 
     public function store(): BelongsTo

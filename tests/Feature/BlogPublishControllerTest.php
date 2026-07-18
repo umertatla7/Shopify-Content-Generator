@@ -5,6 +5,7 @@ namespace Tests\Feature;
 use App\Models\Account;
 use App\Models\AccountUser;
 use App\Models\Blog;
+use App\Models\Product;
 use App\Models\Role;
 use App\Models\ShopifyStore;
 use App\Models\User;
@@ -59,6 +60,14 @@ class BlogPublishControllerTest extends TestCase
             'title' => 'How to choose a moonstone ring',
             'status' => Blog::STATUS_APPROVED,
             'body' => '<p>Useful publishable body content.</p>',
+        ]);
+
+        Product::query()->create([
+            'account_id' => $account->id,
+            'shopify_store_id' => $store->id,
+            'shopify_product_id' => 'gid://shopify/Product/1',
+            'title' => 'Synced product',
+            'status' => 'active',
         ]);
 
         $this->mock(BlogPublishingService::class, function ($mock) use ($blog): void {

@@ -2,7 +2,8 @@
 
 namespace App\Http\Middleware;
 
-use App\Models\ShopifyStore;
+use App\Support\CatalogAccess;
+use App\Support\PlanFeatureGate;
 use App\Support\ShopifyContext;
 use Closure;
 use Illuminate\Http\Request;
@@ -28,18 +29,11 @@ class EnsureCatalogSynced
             return $next($request);
         }
 
-        $primaryStore = ShopifyStore::query()
-            ->forAccount($account->id)
-            ->where('status', 'connected')
-            ->withCount(['products', 'collections', 'pages', 'existingBlogs'])
-            ->latest('id')
-            ->first();
+        if ($this->isDisabledFeaturePreviewRoute($request, $account)) {
+            return $next($request);
+        }
 
-        $catalogSynced = $primaryStore
-            ? (($primaryStore->products_count + $primaryStore->collections_count + $primaryStore->pages_count + $primaryStore->existing_blogs_count) > 0)
-            : false;
-
-        if ($catalogSynced) {
+        if (CatalogAccess::hasSyncedCatalog($account)) {
             return $next($request);
         }
 
@@ -60,5 +54,25 @@ class EnsureCatalogSynced
             'billing.*',
             'support.*',
         );
+    }
+
+    private function isDisabledFeaturePreviewRoute(Request $request, mixed $account): bool
+    {
+        $routeFeature = match (true) {
+            $request->routeIs('products.index') => 'products',
+            $request->routeIs('collections.index') => 'collections',
+            $request->routeIs('topics.index') => 'topics',
+            $request->routeIs('blogs.index') => 'blogs',
+            $request->routeIs('store-audit.index') => 'store_audit',
+            $request->routeIs('rank-tracking.index') => 'rank_tracking',
+            $request->routeIs('visibility.index') => 'ai_visibility',
+            default => null,
+        };
+
+        if (! $routeFeature) {
+            return false;
+        }
+
+        return ! (bool) (PlanFeatureGate::moduleAccess($account)[$routeFeature] ?? false);
     }
 }

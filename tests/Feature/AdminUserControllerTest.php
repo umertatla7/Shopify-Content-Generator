@@ -98,4 +98,47 @@ class AdminUserControllerTest extends TestCase
             ->assertSee($manager->name)
             ->assertDontSee('Customer User');
     }
+
+    public function test_manager_cannot_promote_user_to_super_admin(): void
+    {
+        $manager = User::factory()->create(['global_role' => 'manager']);
+        $managedUser = User::factory()->create();
+
+        $response = $this->actingAs($manager)->patch("/admin/users/{$managedUser->id}", [
+            'name' => $managedUser->name,
+            'email' => $managedUser->email,
+            'global_role' => 'super_admin',
+            'current_account_id' => null,
+            'memberships' => [],
+        ]);
+
+        $response->assertSessionHasErrors('global_role');
+        $this->assertFalse($managedUser->fresh()->isSuperAdmin());
+    }
+
+    public function test_manager_cannot_edit_super_admin(): void
+    {
+        $manager = User::factory()->create(['global_role' => 'manager']);
+        $superAdmin = User::factory()->create(['global_role' => 'super_admin']);
+
+        $this->actingAs($manager)
+            ->get("/admin/users/{$superAdmin->id}/edit")
+            ->assertForbidden();
+    }
+
+    public function test_cannot_remove_last_super_admin(): void
+    {
+        $superAdmin = User::factory()->create(['global_role' => 'super_admin']);
+
+        $response = $this->actingAs($superAdmin)->patch("/admin/users/{$superAdmin->id}", [
+            'name' => $superAdmin->name,
+            'email' => $superAdmin->email,
+            'global_role' => 'manager',
+            'current_account_id' => null,
+            'memberships' => [],
+        ]);
+
+        $response->assertSessionHasErrors('global_role');
+        $this->assertTrue($superAdmin->fresh()->isSuperAdmin());
+    }
 }

@@ -2,6 +2,7 @@
 
 namespace App\Jobs;
 
+use App\Jobs\Concerns\HasAiQueueDefaults;
 use App\Models\ShopifyStore;
 use App\Models\User;
 use App\Services\StoreAnalysisService;
@@ -14,6 +15,7 @@ use Illuminate\Queue\SerializesModels;
 class AnalyzeStoreJob implements ShouldQueue
 {
     use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
+    use HasAiQueueDefaults;
 
     public function __construct(public int $storeId, public ?int $userId = null)
     {

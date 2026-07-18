@@ -129,6 +129,16 @@ GRAPHQL, [
       returnUrl
       lineItems {
         id
+        plan {
+          pricingDetails {
+            ... on AppRecurringPricing {
+              price {
+                amount
+                currencyCode
+              }
+            }
+          }
+        }
       }
     }
   }
@@ -138,7 +148,7 @@ GRAPHQL);
         return Arr::first(Arr::get($data, 'currentAppInstallation.activeSubscriptions', []));
     }
 
-    public function syncAccountSubscription(Account $account, ShopifyStore $store, ?Plan $preferredPlan = null): ?Subscription
+    public function syncAccountSubscription(Account $account, ShopifyStore $store): ?Subscription
     {
         $remote = $this->currentSubscription($store);
 
@@ -149,8 +159,8 @@ GRAPHQL);
             return null;
         }
 
-        return DB::transaction(function () use ($account, $store, $remote, $preferredPlan): Subscription {
-            $plan = $this->resolvePlan($account, $remote, $preferredPlan);
+        return DB::transaction(function () use ($account, $store, $remote): Subscription {
+            $plan = $this->resolvePlan($account, $remote);
 
             if (! $plan) {
                 throw new RuntimeException('The active Shopify subscription could not be matched to a local plan.');
@@ -223,12 +233,8 @@ GRAPHQL);
         });
     }
 
-    private function resolvePlan(Account $account, array $remote, ?Plan $preferredPlan = null): ?Plan
+    private function resolvePlan(Account $account, array $remote): ?Plan
     {
-        if ($preferredPlan) {
-            return $preferredPlan;
-        }
-
         $local = Subscription::query()
             ->where('account_id', $account->id)
             ->where('external_id', $remote['id'])
@@ -236,7 +242,7 @@ GRAPHQL);
             ->latest('id')
             ->first();
 
-        if ($local?->plan) {
+        if ($local?->plan && $this->remoteMatchesPlan($remote, $local->plan)) {
             return $local->plan;
         }
 
@@ -244,18 +250,59 @@ GRAPHQL);
             ->where('account_id', $account->id)
             ->where('provider', 'shopify')
             ->where('status', Subscription::STATUS_PENDING)
+            ->where(function ($query) use ($remote): void {
+                $query->where('external_id', $remote['id'])
+                    ->orWhere('provider_line_item_id', Arr::get($remote, 'lineItems.0.id'));
+            })
             ->with('plan')
             ->latest('id')
             ->first();
 
-        if ($pending?->plan) {
+        if ($pending?->plan && $this->remoteMatchesPlan($remote, $pending->plan)) {
             return $pending->plan;
         }
 
         return Plan::query()
-            ->where('key', $account->plan_key)
-            ->orWhere('shopify_billing_plan_handle', $account->plan_key)
-            ->first();
+            ->where('is_active', true)
+            ->get()
+            ->first(fn (Plan $plan): bool => $this->remoteMatchesPlan($remote, $plan));
+    }
+
+    private function remoteMatchesPlan(array $remote, Plan $plan): bool
+    {
+        $remoteName = $this->normalizePlanName((string) ($remote['name'] ?? ''));
+        $knownNames = array_filter([
+            $this->normalizePlanName((string) $plan->name),
+            $this->normalizePlanName((string) $plan->key),
+            $this->normalizePlanName((string) $plan->shopify_billing_plan_handle),
+        ]);
+
+        if ($remoteName === '' || ! in_array($remoteName, $knownNames, true)) {
+            return false;
+        }
+
+        $remoteAmount = Arr::get($remote, 'lineItems.0.plan.pricingDetails.price.amount');
+
+        if ($remoteAmount !== null && round((float) $remoteAmount, 2) !== round((float) $plan->monthly_price, 2)) {
+            return false;
+        }
+
+        $remoteCurrency = Arr::get($remote, 'lineItems.0.plan.pricingDetails.price.currencyCode');
+
+        if ($remoteCurrency !== null && strtoupper((string) $remoteCurrency) !== 'USD') {
+            return false;
+        }
+
+        return true;
+    }
+
+    private function normalizePlanName(string $value): string
+    {
+        return str($value)
+            ->lower()
+            ->replace(['_', '-'], ' ')
+            ->squish()
+            ->toString();
     }
 
     private function normalizeStatus(string $status, Carbon $createdAt, int $trialDays): string

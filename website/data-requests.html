@@ -59,7 +59,7 @@
           <p>We aim to respond as quickly as possible. Some requests may require additional time depending on verification, backups, legal obligations or Shopify platform requirements.</p>
 
           <h2>App Uninstall</h2>
-          <p>When a merchant uninstalls GrowShopHigh, the app should stop using the store access token. Some account, billing, support and operational records may be retained where needed for security, legal or accounting reasons.</p>
+          <p>When a merchant uninstalls GrowShopHigh, the locally stored Shopify access credential is revoked immediately and the store is disconnected. When Shopify sends its shop redaction webhook, the store workspace, synced catalog, generated content and orphaned merchant identity are deleted. Billing or support records may be retained only where required for legal, accounting, fraud-prevention or dispute purposes.</p>
         </article>
       </div>
     </section>

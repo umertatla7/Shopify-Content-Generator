@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Admin;
 use App\Http\Controllers\Controller;
 use App\Models\Account;
 use App\Models\AccountUser;
+use App\Models\ActivityLog;
 use App\Models\Permission;
 use App\Models\Role;
 use App\Models\User;
@@ -42,6 +43,7 @@ class AdminUserController extends Controller
     public function edit(Request $request, User $user): Response
     {
         abort_unless($request->user()->isPlatformAdmin(), 403);
+        $this->authorizeRoleManagement($request->user(), $user);
 
         return Inertia::render('Admin/Users/Edit', [
             'managedUser' => $user->load(['currentAccount:id,name', 'accounts:id,name']),
@@ -60,6 +62,7 @@ class AdminUserController extends Controller
     public function update(Request $request, User $user): RedirectResponse
     {
         abort_unless($request->user()->isPlatformAdmin(), 403);
+        $this->authorizeRoleManagement($request->user(), $user);
 
         $validated = $request->validate([
             'name' => ['required', 'string', 'max:255'],
@@ -85,6 +88,12 @@ class AdminUserController extends Controller
         if ($currentAccountId !== null && ! in_array($currentAccountId, $membershipAccountIds, true)) {
             return back()->withErrors(['current_account_id' => 'Current account must be one of the user\'s active memberships.']);
         }
+
+        if ($error = $this->validateGlobalRoleChange($request->user(), $user, $validated['global_role'])) {
+            return back()->withErrors(['global_role' => $error]);
+        }
+
+        $previousGlobalRole = $user->global_role;
 
         $user->update([
             'name' => $validated['name'],
@@ -113,6 +122,54 @@ class AdminUserController extends Controller
                 ]);
         }
 
+        if ($previousGlobalRole !== $validated['global_role']) {
+            ActivityLog::query()->create([
+                'account_id' => null,
+                'user_id' => $request->user()->id,
+                'subject_type' => $user->getMorphClass(),
+                'subject_id' => $user->id,
+                'action' => 'admin.user.global_role_changed',
+                'entity_type' => 'user',
+                'status' => 'success',
+                'description' => "Global role changed for {$user->email}.",
+                'previous_values' => ['global_role' => $previousGlobalRole],
+                'new_values' => ['global_role' => $validated['global_role']],
+                'ip_address' => $request->ip(),
+                'user_agent' => $request->userAgent(),
+            ]);
+        }
+
         return redirect()->route('admin.users.edit', $user)->with('status', 'User updated.');
+    }
+
+    private function authorizeRoleManagement(User $actor, User $managedUser): void
+    {
+        if ($actor->isSuperAdmin()) {
+            return;
+        }
+
+        abort_if($managedUser->isSuperAdmin(), 403);
+        abort_if($actor->is($managedUser), 403);
+    }
+
+    private function validateGlobalRoleChange(User $actor, User $managedUser, string $newRole): ?string
+    {
+        if (! $actor->isSuperAdmin() && $newRole === 'super_admin') {
+            return 'Only a super admin can assign the super admin role.';
+        }
+
+        if (! $actor->isSuperAdmin() && $actor->is($managedUser)) {
+            return 'Managers cannot change their own global role.';
+        }
+
+        if ($managedUser->isSuperAdmin() && $newRole !== 'super_admin') {
+            $superAdminCount = User::query()->where('global_role', 'super_admin')->count();
+
+            if ($superAdminCount <= 1) {
+                return 'At least one super admin must remain active.';
+            }
+        }
+
+        return null;
     }
 }

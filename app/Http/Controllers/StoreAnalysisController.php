@@ -5,16 +5,25 @@ namespace App\Http\Controllers;
 use App\Jobs\AnalyzeStoreJob;
 use App\Models\ShopifyStore;
 use App\Models\StoreAnalysis;
+use App\Services\PlanLimitService;
 use App\Services\StoreAnalysisService;
+use App\Support\PlanFeatureGate;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 
 class StoreAnalysisController extends Controller
 {
-    public function store(Request $request, ShopifyStore $store, StoreAnalysisService $analysis): RedirectResponse
+    public function store(Request $request, ShopifyStore $store, StoreAnalysisService $analysis, PlanLimitService $limits): RedirectResponse
     {
         $this->authorize('create', StoreAnalysis::class);
         $this->authorize('view', $store);
+        abort_unless(PlanFeatureGate::moduleAccess($request->user()->currentAccount)['store_audit'], 403);
+
+        try {
+            $limits->ensureWithinLimit($request->user()->currentAccount, 'seo_reports');
+        } catch (\RuntimeException $exception) {
+            return back()->withErrors(['analysis' => $exception->getMessage()]);
+        }
 
         if (! config('services.store_analysis.via_queue', false) || app()->environment('local') || config('queue.default') === 'sync') {
             $this->extendExecutionLimit();

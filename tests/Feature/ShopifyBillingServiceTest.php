@@ -5,6 +5,7 @@ namespace Tests\Feature;
 use App\Models\Account;
 use App\Models\Plan;
 use App\Models\ShopifyStore;
+use App\Models\Subscription;
 use App\Services\Shopify\ShopifyBillingService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Http;
@@ -126,7 +127,20 @@ class ShopifyBillingServiceTest extends TestCase
             ]),
         ]);
 
-        $subscription = app(ShopifyBillingService::class)->syncAccountSubscription($account, $store, $growthPlan);
+        Subscription::query()->create([
+            'account_id' => $account->id,
+            'shopify_store_id' => $store->id,
+            'plan_id' => $growthPlan->id,
+            'provider' => 'shopify',
+            'external_id' => 'gid://shopify/AppSubscription/1',
+            'provider_plan_handle' => 'growth',
+            'provider_line_item_id' => 'gid://shopify/AppSubscriptionLineItem/1',
+            'status' => Subscription::STATUS_PENDING,
+            'amount' => 29,
+            'currency' => 'USD',
+        ]);
+
+        $subscription = app(ShopifyBillingService::class)->syncAccountSubscription($account, $store);
 
         $this->assertSame($growthPlan->id, $subscription->plan_id);
         $this->assertSame('active', $subscription->status);

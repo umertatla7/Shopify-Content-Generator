@@ -4,6 +4,7 @@ use App\Jobs\PublishScheduledBlogsJob;
 use App\Support\SqliteMysqlImporter;
 use Illuminate\Foundation\Inspiring;
 use Illuminate\Support\Facades\Artisan;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Schedule;
 
 Artisan::command('inspire', function () {
@@ -33,5 +34,19 @@ Artisan::command('app:import-sqlite {path} {--fresh}', function (string $path) {
     return self::SUCCESS;
 })->purpose('Import application data from a SQLite file into the default MySQL database');
 
-Schedule::job(new PublishScheduledBlogsJob)->everyMinute();
-Schedule::command('app:prune-logs --days=90')->daily();
+Schedule::call(fn () => Cache::put('operations:scheduler-heartbeat', now(), now()->addMinutes(10)))
+    ->name('operations:scheduler-heartbeat')
+    ->everyMinute()
+    ->withoutOverlapping(2)
+    ->onOneServer();
+
+Schedule::job(new PublishScheduledBlogsJob)
+    ->name('blogs:dispatch-scheduled-publishing')
+    ->everyMinute()
+    ->withoutOverlapping(5)
+    ->onOneServer();
+
+Schedule::command('app:prune-logs --days=90')
+    ->daily()
+    ->withoutOverlapping(30)
+    ->onOneServer();

@@ -53,6 +53,7 @@ class ShopifyStoreController extends Controller
 
     public function store(Request $request, ShopifyService $shopify): RedirectResponse
     {
+        abort_unless(config('services.shopify.manual_connection_mode', false), 404);
         $this->authorize('create', ShopifyStore::class);
 
         $validated = $request->validate([
@@ -77,6 +78,13 @@ class ShopifyStoreController extends Controller
         }
 
         $domain = $shopify->normalizeDomain($validated['shop_url']);
+
+        if (! $shopify->isValidShopDomain($domain)) {
+            throw ValidationException::withMessages([
+                'shop_url' => 'Enter a valid myshopify.com store domain.',
+            ]);
+        }
+
         $existingStore = ShopifyStore::query()
             ->where('account_id', $request->user()->current_account_id)
             ->where('shop_domain', $domain)

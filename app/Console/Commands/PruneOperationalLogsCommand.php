@@ -5,6 +5,7 @@ namespace App\Console\Commands;
 use App\Models\ActivityLog;
 use App\Models\PublishingLog;
 use App\Models\ShopifySyncLog;
+use App\Models\ShopifyWebhookDelivery;
 use App\Models\UsageLog;
 use Illuminate\Console\Command;
 
@@ -23,6 +24,7 @@ class PruneOperationalLogsCommand extends Command
             'activity_logs' => ActivityLog::query()->where('created_at', '<', $cutoff)->delete(),
             'publishing_logs' => PublishingLog::query()->where('created_at', '<', $cutoff)->delete(),
             'shopify_sync_logs' => ShopifySyncLog::query()->where('created_at', '<', $cutoff)->delete(),
+            'shopify_webhook_deliveries' => ShopifyWebhookDelivery::query()->where('created_at', '<', $cutoff)->delete(),
         ];
 
         if ($this->option('include-usage')) {

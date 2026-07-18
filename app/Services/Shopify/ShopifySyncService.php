@@ -2,8 +2,8 @@
 
 namespace App\Services\Shopify;
 
-use App\Models\ExistingShopifyBlog;
 use App\Models\Blog;
+use App\Models\ExistingShopifyBlog;
 use App\Models\Product;
 use App\Models\ShopifyCollection;
 use App\Models\ShopifyPage;
@@ -16,7 +16,7 @@ class ShopifySyncService
 {
     public function __construct(private readonly ShopifyService $shopify) {}
 
-    public function syncStore(ShopifyStore $store, ?ShopifySyncLog $log = null): ShopifySyncLog
+    public function syncStore(ShopifyStore $store, ?ShopifySyncLog $log = null, bool $throwOnFailure = false): ShopifySyncLog
     {
         $log ??= ShopifySyncLog::query()->create([
             'account_id' => $store->account_id,
@@ -71,6 +71,10 @@ class ShopifySyncService
                 'error_message' => $exception->getMessage(),
                 'completed_at' => now(),
             ]);
+
+            if ($throwOnFailure) {
+                throw $exception;
+            }
         }
 
         return $log->refresh();

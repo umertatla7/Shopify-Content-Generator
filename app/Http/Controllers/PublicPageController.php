@@ -33,13 +33,15 @@ class PublicPageController extends Controller
                     'points' => [
                         'We use service providers such as Shopify and configured AI providers only to deliver app functionality.',
                         'We do not sell merchant data.',
-                        'Operational logs are retained only as long as needed for billing, support, security, and product reliability.',
+                        'Operational logs and webhook delivery evidence are normally pruned after 90 days. Billing or support records may be retained longer where required for legal, accounting, fraud-prevention, or dispute purposes.',
                     ],
                 ],
                 [
                     'title' => 'Deletion and access requests',
                     'points' => [
-                        'Merchants can uninstall the app at any time from Shopify admin.',
+                        'Uninstalling immediately revokes the locally stored Shopify access credential and disconnects the store.',
+                        'When Shopify sends the required shop redaction webhook, the store workspace, synced catalog, generated content, and orphaned merchant identity are deleted.',
+                        'GrowShopHigh does not request Shopify customer-data scopes or persist Shopify customer records. Required customer privacy webhooks are still accepted and recorded without retaining their payload.',
                         'For data access or deletion requests, contact the support address listed on the support page from the store owner email.',
                     ],
                 ],

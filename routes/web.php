@@ -59,6 +59,7 @@ Route::middleware('guest')->group(function (): void {
 });
 
 Route::get('/shopify/app', [ShopifyInstallController::class, 'app'])->name('shopify.app');
+Route::post('/shopify/session', [ShopifyInstallController::class, 'session'])->name('shopify.session');
 Route::get('/shopify/install/start', [ShopifyInstallController::class, 'start'])->name('shopify.install.start');
 Route::get('/shopify/oauth/callback', [ShopifyInstallController::class, 'callback'])->name('shopify.oauth.callback');
 

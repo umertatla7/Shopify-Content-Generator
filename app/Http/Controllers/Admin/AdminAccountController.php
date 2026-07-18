@@ -19,6 +19,7 @@ use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 use Inertia\Response;
 use Throwable;
@@ -367,6 +368,12 @@ class AdminAccountController extends Controller
         $previous = $store->only(['name', 'shop_domain', 'country', 'default_language', 'brand_tone', 'status']);
         $domain = $shopify->normalizeDomain($validated['shop_url']);
 
+        if (! $shopify->isValidShopDomain($domain)) {
+            return back()->withErrors([
+                'shop_url' => 'Enter a valid myshopify.com store domain.',
+            ]);
+        }
+
         $store->update([
             'name' => $validated['name'],
             'shop_domain' => $domain,
@@ -429,6 +436,12 @@ class AdminAccountController extends Controller
     private function createAdminManagedStore(Account $account, User $owner, array $data, ShopifyService $shopify): void
     {
         $domain = $shopify->normalizeDomain($data['store_url']);
+
+        if (! $shopify->isValidShopDomain($domain)) {
+            throw ValidationException::withMessages([
+                'store_url' => 'Enter a valid myshopify.com store domain.',
+            ]);
+        }
 
         $store = ShopifyStore::query()->create([
             'account_id' => $account->id,

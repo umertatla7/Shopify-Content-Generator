@@ -118,9 +118,9 @@ class ShopifyContext
     private function extract(Request $request): array
     {
         return [
-            'shop' => $request->query('shop'),
-            'host' => $request->query('host'),
-            'embedded' => $request->query('embedded'),
+            'shop' => $request->query('shop', $request->input('shop')),
+            'host' => $request->query('host', $request->input('host')),
+            'embedded' => $request->query('embedded', $request->input('embedded')),
         ];
     }
 

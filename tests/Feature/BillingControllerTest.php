@@ -181,6 +181,66 @@ class BillingControllerTest extends TestCase
         ]);
     }
 
+    public function test_confirm_ignores_tampered_plan_query_and_uses_actual_shopify_subscription(): void
+    {
+        [$user, $store] = $this->memberWithBillingStore();
+        $this->plan('starter', 19, 'starter', 14);
+        $growth = $this->plan('growth', 29, 'growth', 14);
+
+        Subscription::query()->create([
+            'account_id' => $user->current_account_id,
+            'shopify_store_id' => $store->id,
+            'plan_id' => $growth->id,
+            'provider' => 'shopify',
+            'external_id' => 'gid://shopify/AppSubscription/1',
+            'provider_plan_handle' => 'growth',
+            'provider_line_item_id' => 'gid://shopify/AppSubscriptionLineItem/1',
+            'status' => Subscription::STATUS_PENDING,
+            'amount' => 29,
+            'currency' => 'USD',
+            'confirmation_url' => 'https://shopify.com/confirm/subscription',
+        ]);
+
+        Http::fake([
+            'https://acme.myshopify.com/admin/api/2026-04/graphql.json' => Http::response([
+                'data' => [
+                    'currentAppInstallation' => [
+                        'activeSubscriptions' => [[
+                            'id' => 'gid://shopify/AppSubscription/1',
+                            'name' => 'Growth',
+                            'status' => 'ACTIVE',
+                            'test' => true,
+                            'trialDays' => 14,
+                            'createdAt' => '2026-07-09T00:00:00Z',
+                            'currentPeriodEnd' => '2026-08-09T00:00:00Z',
+                            'returnUrl' => 'https://portal.test/billing/confirm?plan=starter',
+                            'lineItems' => [[
+                                'id' => 'gid://shopify/AppSubscriptionLineItem/1',
+                                'plan' => [
+                                    'pricingDetails' => [
+                                        'price' => [
+                                            'amount' => 29,
+                                            'currencyCode' => 'USD',
+                                        ],
+                                    ],
+                                ],
+                            ]],
+                        ]],
+                    ],
+                ],
+            ]),
+        ]);
+
+        $response = $this->actingAs($user)->get('/billing/confirm?plan=starter');
+
+        $response->assertRedirect('/billing');
+        $this->assertSame('growth', $user->fresh()->currentAccount->plan_key);
+        $this->assertDatabaseHas('subscriptions', [
+            'external_id' => 'gid://shopify/AppSubscription/1',
+            'plan_id' => $growth->id,
+        ]);
+    }
+
     public function test_sync_without_remote_subscription_moves_account_back_to_free(): void
     {
         [$user, $store] = $this->memberWithBillingStore();
