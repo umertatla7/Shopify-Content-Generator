@@ -10,6 +10,7 @@ const props = defineProps({
     stores: Array,
     blogs: Array,
     activity: Array,
+    supportTickets: Array,
     creditUsage: Array,
     aiCostSummary: Object,
     creditsUsedSummary: Object,
@@ -21,6 +22,7 @@ const tabs = [
     { key: 'package', label: 'Package' },
     { key: 'stores', label: 'Store' },
     { key: 'members', label: 'Members' },
+    { key: 'support', label: 'Support' },
     { key: 'activity', label: 'Activity' },
 ];
 
@@ -464,6 +466,45 @@ const saveStore = (store) => router.patch(`/admin/accounts/${props.account.id}/s
                         </Link>
                     </div>
                     <div v-if="!props.account.users.length" class="rounded-md border border-dashed border-zinc-300 p-4 text-sm text-zinc-500">No members yet for this customer.</div>
+                </div>
+            </section>
+        </div>
+
+        <div v-else-if="activeTab === 'support'" class="mt-6">
+            <section class="panel">
+                <div class="panel-header">
+                    <h3 class="text-sm font-bold text-zinc-950">Support tickets</h3>
+                </div>
+                <div class="table-wrap">
+                    <table class="data-table">
+                        <thead>
+                            <tr>
+                                <th>Subject</th>
+                                <th>Status</th>
+                                <th>Module</th>
+                                <th>Store</th>
+                                <th>Opened by</th>
+                                <th>Messages</th>
+                                <th>Last message</th>
+                                <th></th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr v-for="ticket in props.supportTickets" :key="ticket.id">
+                                <td class="font-semibold text-zinc-950">{{ ticket.subject }}</td>
+                                <td><span class="badge" :class="ticket.status === 'waiting_admin' ? 'badge-failed' : 'badge-success'">{{ humanStatus(ticket.status) }}</span></td>
+                                <td>{{ humanStatus(ticket.module) }}</td>
+                                <td>{{ ticket.store?.name ?? '-' }}</td>
+                                <td>{{ ticket.opened_by?.email ?? '-' }}</td>
+                                <td>{{ ticket.messages_count }}</td>
+                                <td>{{ ticket.last_message_at ? new Date(ticket.last_message_at).toLocaleString() : '-' }}</td>
+                                <td><Link :href="`/admin/support?ticket=${ticket.id}`" class="text-sm font-semibold text-teal-700">Open</Link></td>
+                            </tr>
+                            <tr v-if="!props.supportTickets.length">
+                                <td colspan="8" class="text-sm text-zinc-500">No support tickets for this customer yet.</td>
+                            </tr>
+                        </tbody>
+                    </table>
                 </div>
             </section>
         </div>

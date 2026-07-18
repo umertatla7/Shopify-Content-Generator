@@ -90,6 +90,11 @@ class ShopifyStore extends Model
         return $this->hasMany(AeoGeoVisibilityReport::class);
     }
 
+    public function supportTickets(): HasMany
+    {
+        return $this->hasMany(SupportTicket::class);
+    }
+
     public function latestVisibilityReport(): HasOne
     {
         return $this->hasOne(AeoGeoVisibilityReport::class)->latestOfMany();

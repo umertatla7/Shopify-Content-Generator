@@ -10,6 +10,7 @@ import {
     Layers,
     LineChart,
     Lightbulb,
+    LifeBuoy,
     LogOut,
     Package,
     Settings,
@@ -90,9 +91,10 @@ const customerItems = computed(() => [
     { href: '/blogs?status=scheduled', label: 'Schedule', section: 'Content', icon: CalendarClock, show: permissions.value['blogs.approve'], locked: !planAccess.value.schedule },
     { href: '/rank-tracking', label: 'Keyword Tracking', section: 'Growth', icon: LineChart, show: true, locked: !planAccess.value.rank_tracking },
     { href: '/ai-visibility', label: 'AI Visibility', section: 'Growth', icon: Bot, show: true, locked: !planAccess.value.ai_visibility },
+    { href: '/help', label: 'Support', section: 'Help', icon: LifeBuoy, show: true, locked: false },
 ]);
 
-const preSyncAllowedHrefs = new Set(['/stores', '/billing']);
+const preSyncAllowedHrefs = new Set(['/stores', '/billing', '/help']);
 
 const itemIsDisabled = (item) => {
     if (isAdmin.value) {
@@ -125,6 +127,7 @@ const itemHint = (item) => {
 const adminItems = [
     { href: '/admin/dashboard', label: 'Overview', icon: BarChart3, show: true },
     { href: '/admin/accounts', label: 'Customers', icon: Building2, show: true },
+    { href: '/admin/support', label: 'Support Inbox', icon: LifeBuoy, show: true },
     { href: '/admin/users', label: 'Team', icon: Users, show: true },
     { href: '/admin/activity', label: 'Activity Logs', icon: Activity, show: true },
     { href: '/admin/dashboard?focus=costs', label: 'AI Cost', icon: DollarSign, show: true },
@@ -142,7 +145,7 @@ const navGroups = computed(() => {
         return [{ label: 'Platform', items: baseItems }];
     }
 
-    const order = ['Overview', 'Content', 'Growth'];
+    const order = ['Overview', 'Content', 'Growth', 'Help'];
 
     return order
         .map((label) => ({

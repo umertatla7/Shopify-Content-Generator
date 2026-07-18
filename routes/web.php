@@ -7,6 +7,7 @@ use App\Http\Controllers\Admin\AdminDashboardController;
 use App\Http\Controllers\Admin\AdminPlanController;
 use App\Http\Controllers\Admin\AdminSettingsController;
 use App\Http\Controllers\Admin\AdminStoreController;
+use App\Http\Controllers\Admin\AdminSupportTicketController;
 use App\Http\Controllers\Admin\AdminTopicController;
 use App\Http\Controllers\Admin\AdminUserController;
 use App\Http\Controllers\AeoGeoVisibilityController;
@@ -35,6 +36,7 @@ use App\Http\Controllers\ShopifyInstallController;
 use App\Http\Controllers\ShopifyStoreController;
 use App\Http\Controllers\StoreAnalysisController;
 use App\Http\Controllers\StoreKnowledgeBaseController;
+use App\Http\Controllers\SupportTicketController;
 use App\Http\Controllers\TeamController;
 use Illuminate\Support\Facades\Route;
 
@@ -88,7 +90,15 @@ Route::middleware('auth')->group(function (): void {
         Route::get('/topics', [AdminTopicController::class, 'index'])->name('topics.index');
         Route::get('/blogs', [AdminBlogController::class, 'index'])->name('blogs.index');
         Route::get('/activity', [AdminActivityController::class, 'index'])->name('activity.index');
+        Route::get('/support', [AdminSupportTicketController::class, 'index'])->name('support.index');
+        Route::post('/support/{ticket}/messages', [AdminSupportTicketController::class, 'reply'])->name('support.messages.store');
+        Route::patch('/support/{ticket}', [AdminSupportTicketController::class, 'update'])->name('support.update');
     });
+
+    Route::get('/help', [SupportTicketController::class, 'index'])->name('support.index');
+    Route::post('/help/tickets', [SupportTicketController::class, 'store'])->name('support.tickets.store');
+    Route::post('/help/tickets/{ticket}/messages', [SupportTicketController::class, 'reply'])->name('support.tickets.messages.store');
+    Route::patch('/help/tickets/{ticket}/close', [SupportTicketController::class, 'close'])->name('support.tickets.close');
 
     Route::get('/stores', [ShopifyStoreController::class, 'index'])->name('stores.index');
     Route::get('/store-audit', [ShopifyStoreController::class, 'audit'])->name('store-audit.index');

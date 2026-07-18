@@ -70,6 +70,11 @@ class Account extends Model
         return $this->hasMany(ActivityLog::class);
     }
 
+    public function supportTickets(): HasMany
+    {
+        return $this->hasMany(SupportTicket::class);
+    }
+
     public function searchConsoleConnections(): HasMany
     {
         return $this->hasMany(SearchConsoleConnection::class);

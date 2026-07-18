@@ -58,6 +58,7 @@ class EnsureCatalogSynced
             'stores.sync',
             'stores.destroy',
             'billing.*',
+            'support.*',
         );
     }
 }

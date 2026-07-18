@@ -8,6 +8,7 @@ use App\Models\ActivityLog;
 use App\Models\Plan;
 use App\Models\Role;
 use App\Models\ShopifyStore;
+use App\Models\SupportTicket;
 use App\Models\UsageLog;
 use App\Models\User;
 use App\Services\AICostService;
@@ -176,6 +177,13 @@ class AdminAccountController extends Controller
             'stores' => $stores,
             'blogs' => $account->blogs()->with('store:id,name')->latest()->limit(20)->get(),
             'activity' => $account->activityLogs()->with(['user:id,name,email', 'store:id,name'])->latest()->limit(20)->get(),
+            'supportTickets' => SupportTicket::query()
+                ->with(['store:id,name,shop_domain', 'openedBy:id,name,email'])
+                ->withCount('messages')
+                ->where('account_id', $account->id)
+                ->latest('last_message_at')
+                ->limit(20)
+                ->get(),
             'creditUsage' => $account->usageLogs()
                 ->where('type', 'credit_usage')
                 ->latest()
