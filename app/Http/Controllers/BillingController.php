@@ -50,7 +50,7 @@ class BillingController extends Controller
             'billingReadiness' => [
                 'has_connected_store' => (bool) $primaryStore,
                 'has_public_app_key' => filled(config('services.shopify.public_app_api_key')),
-                'manual_connection_mode' => (bool) config('services.shopify.manual_connection_mode', true),
+                'manual_connection_mode' => (bool) config('services.shopify.manual_connection_mode', false),
                 'uses_shopify_billing' => true,
                 'has_paid_plan_config' => $paidPlans->isNotEmpty(),
                 'misconfigured_paid_plans' => $misconfiguredPaidPlans->pluck('name')->values()->all(),

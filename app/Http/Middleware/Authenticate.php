@@ -15,7 +15,7 @@ class Authenticate extends Middleware
             return null;
         }
 
-        if ((bool) config('services.shopify.manual_connection_mode', true)) {
+        if ((bool) config('services.shopify.manual_connection_mode', false)) {
             return route('login');
         }
 

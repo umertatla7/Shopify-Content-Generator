@@ -27,6 +27,8 @@ class ShopifyInstallController extends Controller
 {
     private const OAUTH_CACHE_PREFIX = 'shopify_oauth:';
 
+    private const SESSION_HANDOFF_CACHE_PREFIX = 'shopify_session_handoff:';
+
     public function app(Request $request, ShopifyService $shopify, ShopifyContext $shopifyContext): RedirectResponse|Response|View
     {
         $shopifyContext->remember($request);
@@ -34,6 +36,15 @@ class ShopifyInstallController extends Controller
         $shop = $shopify->normalizeDomain((string) $request->query('shop', ''));
 
         if ($shop === '' || ! $shopify->isValidShopDomain($shop)) {
+            if ($this->isEmbeddedRequest($request)) {
+                return response(
+                    'A valid Shopify shop context is required. Reopen GrowShopHigh from Shopify admin.',
+                    Response::HTTP_UNPROCESSABLE_ENTITY,
+                )->withHeaders([
+                    'Cache-Control' => 'no-store, no-cache, must-revalidate, max-age=0',
+                ]);
+            }
+
             return redirect()->route('login')->withErrors([
                 'shopify' => 'A valid Shopify shop domain is required.',
             ]);
@@ -52,17 +63,19 @@ class ShopifyInstallController extends Controller
             $store = ShopifyStore::query()->where('shop_domain', $shop)->first();
         }
 
+        if ($this->isEmbeddedRequest($request) && $store?->credential?->admin_api_access_token) {
+            return response()->view('shopify-session', [
+                'apiKey' => $shopify->publicAppApiKey(),
+                'shop' => $shop,
+                'host' => (string) $request->query('host', ''),
+                'handoff' => $this->createSessionHandoff($request, $shop),
+                'target' => route('shopify.session'),
+            ], Response::HTTP_OK)->withHeaders([
+                'Cache-Control' => 'no-store, no-cache, must-revalidate, max-age=0',
+            ]);
+        }
+
         if (! $request->user() && $store?->credential?->admin_api_access_token) {
-            if ($this->isEmbeddedRequest($request)) {
-                return response()->view('shopify-session', [
-                    'apiKey' => $shopify->publicAppApiKey(),
-                    'shop' => $shop,
-                    'host' => (string) $request->query('host', ''),
-                    'target' => route('shopify.session'),
-                ], Response::HTTP_OK)->withHeaders([
-                    'Cache-Control' => 'no-store, no-cache, must-revalidate, max-age=0',
-                ]);
-            }
 
             return redirect()->to($shopifyContext->decorate(route('shopify.install.start', ['shop' => $shop]), $request));
         }
@@ -99,10 +112,31 @@ class ShopifyInstallController extends Controller
         }
 
         try {
-            $sessionToken->fromRequest($request, $shop);
+            $verifiedSession = $sessionToken->fromRequest($request, $shop);
         } catch (RuntimeException $exception) {
             throw ValidationException::withMessages([
                 'shopify' => $exception->getMessage(),
+            ]);
+        }
+
+        $jti = (string) ($verifiedSession['payload']['jti'] ?? '');
+        $expiresAt = (int) ($verifiedSession['payload']['exp'] ?? 0);
+        $handoff = (string) $request->input('handoff', '');
+        $handoffContext = $handoff !== ''
+            ? Cache::pull($this->sessionHandoffCacheKey($handoff))
+            : null;
+
+        if (! is_array($handoffContext) || ! $this->handoffMatchesRequest($handoffContext, $request, $shop)) {
+            throw ValidationException::withMessages([
+                'shopify' => 'This Shopify session handoff expired or did not match this browser. Reopen the app from Shopify admin.',
+            ]);
+        }
+
+        $handoffKey = self::SESSION_HANDOFF_CACHE_PREFIX.hash('sha256', $shop.'|'.$jti);
+
+        if ($jti === '' || ! Cache::add($handoffKey, true, max(1, $expiresAt - time()))) {
+            throw ValidationException::withMessages([
+                'shopify' => 'This Shopify session handoff was already used. Reopen the app from Shopify admin.',
             ]);
         }
 
@@ -130,6 +164,14 @@ class ShopifyInstallController extends Controller
 
         Auth::login($user);
         $request->session()->regenerate();
+        $request->session()->put('shopify_verified_context', [
+            'shop' => $shop,
+            'account_id' => $account->id,
+            'sid' => (string) ($verifiedSession['payload']['sid'] ?? ''),
+            'host_hash' => hash('sha256', (string) $request->input('host', '')),
+            'user_agent_hash' => hash('sha256', (string) $request->userAgent()),
+            'expires_at' => $expiresAt,
+        ]);
 
         $destination = $this->shouldShowOnboarding($store, [
             'created_user' => false,
@@ -152,7 +194,7 @@ class ShopifyInstallController extends Controller
             ]);
         }
 
-        if ($request->user() && ! $this->isEmbeddedRequest($request)) {
+        if ($this->manualConnectionEnabled() && $request->user() && ! $this->isEmbeddedRequest($request)) {
             $this->ensureStoreSlotAvailable($request->user()->currentAccount, $shop);
         }
 
@@ -161,8 +203,8 @@ class ShopifyInstallController extends Controller
         $oauth = [
             'state' => $state,
             'shop' => $shop,
-            'account_id' => $request->user()?->current_account_id,
-            'user_id' => $request->user()?->id,
+            'account_id' => $this->manualConnectionEnabled() ? $request->user()?->current_account_id : null,
+            'user_id' => $this->manualConnectionEnabled() ? $request->user()?->id : null,
             'started_at' => now()->toIso8601String(),
         ];
         $request->session()->put('shopify_oauth', $oauth);
@@ -353,7 +395,7 @@ class ShopifyInstallController extends Controller
             return $this->resolveExistingStoreIdentity($request, $accounts, $existingStore, $metadata);
         }
 
-        $user = $request->user();
+        $user = $this->manualConnectionEnabled() ? $request->user() : null;
         $createdUser = false;
         $createdAccount = false;
 
@@ -369,7 +411,7 @@ class ShopifyInstallController extends Controller
 
         $account = $user->currentAccount;
 
-        if (! $request->user() && $account && ! $this->accountCanAcceptStore($account, $shop)) {
+        if (! $user && $account && ! $this->accountCanAcceptStore($account, $shop)) {
             $account = null;
         }
 
@@ -397,17 +439,9 @@ class ShopifyInstallController extends Controller
         array $metadata,
     ): array {
         $account = $existingStore->account;
-        $user = $request->user();
-
-        if ($user && ! $user->belongsToAccount($account) && ! $user->isPlatformAdmin()) {
-            throw new RuntimeException('This Shopify store is already connected to another account.');
-        }
-
-        if (! $user) {
-            $user = $existingStore->connectedBy
-                ?: $account?->owner
-                ?: $account?->users->first();
-        }
+        $user = $existingStore->connectedBy
+            ?: $account?->owner
+            ?: $account?->users->first();
 
         $createdUser = false;
 
@@ -501,6 +535,37 @@ class ShopifyInstallController extends Controller
         return self::OAUTH_CACHE_PREFIX.$state;
     }
 
+    private function createSessionHandoff(Request $request, string $shop): string
+    {
+        $handoff = Str::random(64);
+
+        Cache::put($this->sessionHandoffCacheKey($handoff), [
+            'shop' => $shop,
+            'host_hash' => hash('sha256', (string) $request->query('host', '')),
+            'user_agent_hash' => hash('sha256', (string) $request->userAgent()),
+        ], now()->addMinutes(2));
+
+        return $handoff;
+    }
+
+    private function sessionHandoffCacheKey(string $handoff): string
+    {
+        return self::SESSION_HANDOFF_CACHE_PREFIX.hash('sha256', $handoff);
+    }
+
+    private function handoffMatchesRequest(array $handoff, Request $request, string $shop): bool
+    {
+        return hash_equals((string) ($handoff['shop'] ?? ''), $shop)
+            && hash_equals(
+                (string) ($handoff['host_hash'] ?? ''),
+                hash('sha256', (string) $request->input('host', '')),
+            )
+            && hash_equals(
+                (string) ($handoff['user_agent_hash'] ?? ''),
+                hash('sha256', (string) $request->userAgent()),
+            );
+    }
+
     private function isEmbeddedRequest(Request $request): bool
     {
         if ($request->boolean('embedded')) {
@@ -508,6 +573,11 @@ class ShopifyInstallController extends Controller
         }
 
         return filled((string) $request->query('host', ''));
+    }
+
+    private function manualConnectionEnabled(): bool
+    {
+        return (bool) config('services.shopify.manual_connection_mode', false);
     }
 
     private function uniqueInstallEmail(string $email, string $shop): string

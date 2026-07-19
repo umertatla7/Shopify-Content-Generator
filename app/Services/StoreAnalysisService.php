@@ -7,6 +7,7 @@ use App\Models\ShopifyStore;
 use App\Models\StoreAnalysis;
 use App\Models\User;
 use App\Services\AI\AIProviderService;
+use App\Services\Shopify\ShopifyService;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Str;
@@ -18,6 +19,7 @@ class StoreAnalysisService
         private readonly AIProviderService $ai,
         private readonly UsageTrackingService $usage,
         private readonly SystemSettingService $settings,
+        private readonly ShopifyService $shopify,
     ) {}
 
     public function analyze(ShopifyStore $store, ?User $user = null): StoreAnalysis
@@ -178,7 +180,7 @@ class StoreAnalysisService
             ->all();
 
         $seoOpportunities = array_values(array_filter([
-            $homepage['meta_description'] ? null : 'Add or improve the homepage meta description.',
+            filled($homepage['meta_description'] ?? null) ? null : 'Add or improve the homepage meta description.',
             ($homepage['h1_count'] ?? 0) === 1 ? null : 'Use exactly one clear H1 on the homepage.',
             $productsMissingSeo ? 'Add SEO titles and meta descriptions to products missing search snippets.' : null,
             $collectionsMissingDescriptions ? 'Write collection descriptions for stronger category SEO.' : null,
@@ -267,7 +269,7 @@ class StoreAnalysisService
             'region_specific_opportunities' => [$store->country ? "Localize examples, shipping language, and seasonal references for {$store->country}." : 'Add region-specific examples based on the target market.'],
             'homepage_report' => [
                 'score' => max(0, 100 - (count($homepageIssues) * 10)),
-                'url' => $homepage['url'] ?? $store->shop_url,
+                'url' => $homepage['url'] ?? null,
                 'status' => $homepageStatus,
                 'title' => $homepage['title'] ?? null,
                 'meta_description' => $homepage['meta_description'] ?? null,
@@ -309,9 +311,9 @@ class StoreAnalysisService
                 'recommendations' => $blogRecommendations,
             ],
             'seo_report' => [
-                'homepage_title' => $homepage['title'],
-                'homepage_meta_description' => $homepage['meta_description'],
-                'h1_count' => $homepage['h1_count'],
+                'homepage_title' => $homepage['title'] ?? null,
+                'homepage_meta_description' => $homepage['meta_description'] ?? null,
+                'h1_count' => $homepage['h1_count'] ?? null,
                 'products_missing_descriptions' => $productsMissingDescriptions,
                 'products_missing_seo' => $productsMissingSeo,
                 'collections_missing_descriptions' => $collectionsMissingDescriptions,
@@ -357,10 +359,22 @@ class StoreAnalysisService
     {
         $mobileFallback = $this->crawlPerformanceEstimate($homepage, 'mobile');
         $desktopFallback = $this->crawlPerformanceEstimate($homepage, 'desktop');
+        $storefrontUrl = $this->canonicalStorefrontUrl($store);
         $reports = [
             'mobile' => $mobileFallback,
             'desktop' => $desktopFallback,
         ];
+
+        if (! $storefrontUrl) {
+            return [
+                ...$mobileFallback,
+                'mobile' => $reports['mobile'],
+                'desktop' => $reports['desktop'],
+                'source' => 'unavailable',
+                'source_label' => 'Unavailable',
+                'note' => 'Performance analysis requires a canonical myshopify.com domain.',
+            ];
+        }
 
         if (! config('services.pagespeed.enabled', true)) {
             return [
@@ -377,7 +391,7 @@ class StoreAnalysisService
             try {
                 $timeout = max(5, min((int) config('services.pagespeed.timeout', 45), 12));
                 $query = [
-                    'url' => $store->shop_url,
+                    'url' => $storefrontUrl,
                     'strategy' => $strategy,
                     'category' => 'performance',
                 ];
@@ -664,13 +678,25 @@ class StoreAnalysisService
     private function homepageAudit(ShopifyStore $store): array
     {
         $started = microtime(true);
+        $storefrontUrl = $this->canonicalStorefrontUrl($store);
+
+        if (! $storefrontUrl) {
+            return [
+                'url' => null,
+                'status' => 'failed',
+                'error' => 'Store audit requires a canonical myshopify.com domain.',
+                'response_time_ms' => 0,
+            ];
+        }
 
         try {
-            $response = Http::timeout(15)->get($store->shop_url);
+            $response = Http::withOptions(['allow_redirects' => false])
+                ->timeout(15)
+                ->get($storefrontUrl);
             $html = (string) $response->body();
         } catch (Throwable $exception) {
             return [
-                'url' => $store->shop_url,
+                'url' => $storefrontUrl,
                 'status' => 'failed',
                 'error' => $exception->getMessage(),
                 'response_time_ms' => (int) round((microtime(true) - $started) * 1000),
@@ -698,7 +724,7 @@ class StoreAnalysisService
         }
 
         return [
-            'url' => $store->shop_url,
+            'url' => $storefrontUrl,
             'status' => $response->status(),
             'response_time_ms' => (int) round((microtime(true) - $started) * 1000),
             'html_bytes' => strlen($html),
@@ -713,6 +739,15 @@ class StoreAnalysisService
             'image_without_dimensions_count' => $missingDimensions,
             'canonical_url' => $this->canonicalUrl($dom),
         ];
+    }
+
+    private function canonicalStorefrontUrl(ShopifyStore $store): ?string
+    {
+        $domain = $this->shopify->normalizeDomain((string) $store->shop_domain);
+
+        return $this->shopify->isValidShopDomain($domain)
+            ? 'https://'.$domain
+            : null;
     }
 
     private function firstTagText(\DOMDocument $dom, string $tag): ?string

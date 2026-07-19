@@ -66,7 +66,7 @@ class RegisteredUserController extends Controller
         ShopifyService $shopify,
         ShopifyContext $shopifyContext,
     ): ?RedirectResponse {
-        if ((bool) config('services.shopify.manual_connection_mode', true)) {
+        if ((bool) config('services.shopify.manual_connection_mode', false)) {
             return null;
         }
 

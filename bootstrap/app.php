@@ -33,6 +33,10 @@ return Application::configure(basePath: dirname(__DIR__))
             AddSecurityHeaders::class,
         ]);
 
+        $middleware->api(prepend: [
+            AuthenticateShopifySessionToken::class,
+        ]);
+
         $middleware->prependToPriorityList(
             AuthenticatesRequests::class,
             AuthenticateShopifySessionToken::class,

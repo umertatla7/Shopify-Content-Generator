@@ -57,6 +57,7 @@
             <input type="hidden" name="shop" value="{{ $shop }}">
             <input type="hidden" name="host" value="{{ $host }}">
             <input type="hidden" name="embedded" value="1">
+            <input type="hidden" name="handoff" value="{{ $handoff }}">
             <input type="hidden" name="id_token" id="id-token">
         </form>
 

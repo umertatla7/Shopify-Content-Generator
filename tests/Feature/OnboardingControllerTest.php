@@ -30,7 +30,11 @@ class OnboardingControllerTest extends TestCase
             'completed_at' => now(),
         ]);
 
-        $response = $this->actingAs($user)->get('/onboarding?shop=acme.myshopify.com&host=test-host');
+        $response = $this
+            ->withHeader('User-Agent', 'Shopify Test Browser')
+            ->withSession($this->verifiedShopifySession($account->id))
+            ->actingAs($user)
+            ->get('/onboarding?shop=acme.myshopify.com&host=test-host');
 
         $response->assertOk();
         $response->assertInertia(fn (Assert $page) => $page
@@ -43,18 +47,26 @@ class OnboardingControllerTest extends TestCase
 
     public function test_unsynced_accounts_are_redirected_back_to_onboarding_for_locked_modules(): void
     {
-        [$user] = $this->makeCustomerAccount();
+        [$user, $account] = $this->makeCustomerAccount();
 
-        $response = $this->actingAs($user)->get('/products?shop=acme.myshopify.com&host=test-host&embedded=1');
+        $response = $this
+            ->withHeader('User-Agent', 'Shopify Test Browser')
+            ->withSession($this->verifiedShopifySession($account->id))
+            ->actingAs($user)
+            ->get('/products?shop=acme.myshopify.com&host=test-host&embedded=1');
 
         $response->assertRedirect('/onboarding?shop=acme.myshopify.com&host=test-host&embedded=1');
     }
 
     public function test_unsynced_accounts_can_still_open_billing_before_first_sync(): void
     {
-        [$user] = $this->makeCustomerAccount();
+        [$user, $account] = $this->makeCustomerAccount();
 
-        $response = $this->actingAs($user)->get('/billing?shop=acme.myshopify.com&host=test-host&embedded=1');
+        $response = $this
+            ->withHeader('User-Agent', 'Shopify Test Browser')
+            ->withSession($this->verifiedShopifySession($account->id))
+            ->actingAs($user)
+            ->get('/billing?shop=acme.myshopify.com&host=test-host&embedded=1');
 
         $response->assertOk();
     }
@@ -107,5 +119,19 @@ class OnboardingControllerTest extends TestCase
         ]);
 
         return [$user, $account, $store];
+    }
+
+    private function verifiedShopifySession(int $accountId): array
+    {
+        return [
+            'shopify_verified_context' => [
+                'shop' => 'acme.myshopify.com',
+                'account_id' => $accountId,
+                'sid' => 'verified-test-session',
+                'host_hash' => hash('sha256', 'test-host'),
+                'user_agent_hash' => hash('sha256', 'Shopify Test Browser'),
+                'expires_at' => time() + 60,
+            ],
+        ];
     }
 }

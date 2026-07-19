@@ -37,7 +37,7 @@ class ShopifyContext
             'embedded' => $embedded,
             'public_app_api_key' => config('services.shopify.public_app_api_key'),
             'public_app_url' => rtrim((string) config('services.shopify.public_app_url', config('app.url')), '/'),
-            'manual_connection_mode' => (bool) config('services.shopify.manual_connection_mode', true),
+            'manual_connection_mode' => (bool) config('services.shopify.manual_connection_mode', false),
         ];
     }
 
