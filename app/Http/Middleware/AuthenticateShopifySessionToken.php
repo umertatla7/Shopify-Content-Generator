@@ -69,6 +69,12 @@ class AuthenticateShopifySessionToken
             ->where('shop_domain', $session['shop'])
             ->first();
 
+        if ($store?->status === 'reconnect_required') {
+            return response()->json([
+                'message' => 'Shopify authorization expired. Reopen the app from Shopify admin to reconnect this store.',
+            ], 401);
+        }
+
         if (! $store?->credential?->admin_api_access_token || $store->status !== 'connected') {
             return response()->json(['message' => 'This Shopify store is not connected.'], 401);
         }

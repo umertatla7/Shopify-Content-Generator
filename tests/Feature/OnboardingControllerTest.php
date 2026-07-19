@@ -5,7 +5,9 @@ namespace Tests\Feature;
 use App\Models\Account;
 use App\Models\AccountUser;
 use App\Models\Plan;
+use App\Models\Product;
 use App\Models\Role;
+use App\Models\ShopifyCollection;
 use App\Models\ShopifyStore;
 use App\Models\ShopifySyncLog;
 use App\Models\User;
@@ -20,6 +22,16 @@ class OnboardingControllerTest extends TestCase
     public function test_onboarding_renders_with_latest_sync_log_loaded(): void
     {
         [$user, $account, $store] = $this->makeCustomerAccount();
+
+        ShopifySyncLog::query()->create([
+            'account_id' => $account->id,
+            'shopify_store_id' => $store->id,
+            'sync_type' => 'full',
+            'status' => 'failed',
+            'started_at' => now()->subHour(),
+            'completed_at' => now()->subMinutes(50),
+            'error_message' => 'Older failure',
+        ]);
 
         ShopifySyncLog::query()->create([
             'account_id' => $account->id,
@@ -69,6 +81,46 @@ class OnboardingControllerTest extends TestCase
             ->get('/billing?shop=acme.myshopify.com&host=test-host&embedded=1');
 
         $response->assertOk();
+    }
+
+    public function test_pages_using_latest_sync_log_render_without_ambiguous_columns(): void
+    {
+        [$user, $account, $store] = $this->makeCustomerAccount();
+        Plan::query()->where('key', 'free')->update(['features' => ['all_features']]);
+        Product::query()->create([
+            'account_id' => $account->id,
+            'shopify_store_id' => $store->id,
+            'shopify_product_id' => 'gid://shopify/Product/1',
+            'title' => 'Test Product',
+            'handle' => 'test-product',
+        ]);
+        ShopifyCollection::query()->create([
+            'account_id' => $account->id,
+            'shopify_store_id' => $store->id,
+            'shopify_collection_id' => 'gid://shopify/Collection/1',
+            'title' => 'Test Collection',
+            'handle' => 'test-collection',
+        ]);
+        ShopifySyncLog::query()->create([
+            'account_id' => $account->id,
+            'shopify_store_id' => $store->id,
+            'sync_type' => 'full',
+            'status' => 'completed',
+            'started_at' => now()->subMinute(),
+            'completed_at' => now(),
+        ]);
+
+        $this->withHeader('User-Agent', 'Shopify Test Browser')
+            ->withSession($this->verifiedShopifySession($account->id))
+            ->actingAs($user);
+
+        foreach (['/onboarding', '/dashboard', '/stores', '/products', '/collections'] as $path) {
+            $this->get("{$path}?shop=acme.myshopify.com&host=test-host&embedded=1")->assertOk();
+        }
+
+        $latest = $store->fresh()->load('latestSyncLog')->latestSyncLog;
+        $this->assertNotNull($latest);
+        $this->assertSame('completed', $latest->status);
     }
 
     private function makeCustomerAccount(): array

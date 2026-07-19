@@ -9,6 +9,7 @@ use App\Models\ShopifyCollection;
 use App\Models\ShopifyPage;
 use App\Models\ShopifyStore;
 use App\Models\ShopifySyncLog;
+use App\Services\Shopify\ShopifyReconnectRequiredException;
 use Illuminate\Support\Arr;
 use Throwable;
 
@@ -60,9 +61,23 @@ class ShopifySyncService
                 ],
                 'completed_at' => now(),
             ]);
+        } catch (ShopifyReconnectRequiredException $exception) {
+            $store->forceFill([
+                'status' => 'reconnect_required',
+                'validation_error' => $exception->getMessage(),
+            ])->save();
+
+            $log->update([
+                'status' => 'failed',
+                'error_message' => $exception->getMessage(),
+                'completed_at' => now(),
+            ]);
+
+            if ($throwOnFailure) {
+                throw $exception;
+            }
         } catch (Throwable $exception) {
             $store->forceFill([
-                'status' => 'disconnected',
                 'validation_error' => $exception->getMessage(),
             ])->save();
 

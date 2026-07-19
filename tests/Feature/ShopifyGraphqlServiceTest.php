@@ -29,6 +29,8 @@ class ShopifyGraphqlServiceTest extends TestCase
         $this->assertNull($credential->admin_api_access_token);
         $this->assertSame('client_id', $credential->api_key);
         $this->assertSame('client_secret', $credential->client_secret);
+        $this->assertArrayNotHasKey('admin_api_access_token', $credential->toArray());
+        $this->assertArrayNotHasKey('refresh_token', $credential->toArray());
     }
 
     public function test_empty_graphql_variables_are_sent_as_an_object(): void
@@ -53,20 +55,25 @@ class ShopifyGraphqlServiceTest extends TestCase
         Http::assertSent(fn ($request) => Str::contains($request->body(), '"variables":{}'));
     }
 
-    public function test_expired_token_is_refreshed_from_client_credentials_before_graphql_request(): void
+    public function test_expired_offline_token_is_refreshed_before_graphql_request(): void
     {
+        config()->set('services.shopify.public_app_api_key', 'client_id');
+        config()->set('services.shopify.public_app_client_secret', 'client_secret');
+
         $store = $this->storeWithCredential([
             'admin_api_access_token' => 'old_token',
-            'api_key' => 'client_id',
-            'client_secret' => 'client_secret',
+            'refresh_token' => 'old_refresh_token',
             'expires_at' => now()->subMinute(),
+            'refresh_token_expires_at' => now()->addDays(30),
         ]);
 
         Http::fake([
             'https://acme.myshopify.com/admin/oauth/access_token' => Http::response([
                 'access_token' => 'new_token',
+                'refresh_token' => 'new_refresh_token',
                 'scope' => 'read_products,write_content',
-                'expires_in' => 86399,
+                'expires_in' => 3600,
+                'refresh_token_expires_in' => 7776000,
             ]),
             'https://acme.myshopify.com/admin/api/2026-04/graphql.json' => Http::response([
                 'data' => [
@@ -83,15 +90,80 @@ class ShopifyGraphqlServiceTest extends TestCase
         $credential = $store->credential()->firstOrFail();
 
         $this->assertSame('new_token', $credential->admin_api_access_token);
+        $this->assertSame('new_refresh_token', $credential->refresh_token);
         $this->assertSame(['read_products', 'write_content'], $credential->scopes);
         $this->assertTrue($credential->expires_at->isFuture());
 
         Http::assertSent(fn ($request) => $request->url() === 'https://acme.myshopify.com/admin/oauth/access_token'
-            && ($request->data()['grant_type'] ?? null) === 'client_credentials'
+            && ($request->data()['grant_type'] ?? null) === 'refresh_token'
+            && ($request->data()['refresh_token'] ?? null) === 'old_refresh_token'
             && ($request->data()['client_id'] ?? null) === 'client_id');
 
         Http::assertSent(fn ($request) => $request->url() === 'https://acme.myshopify.com/admin/api/2026-04/graphql.json'
             && $request->hasHeader('X-Shopify-Access-Token', 'new_token'));
+    }
+
+    public function test_expired_refresh_token_returns_a_reconnectable_store_state(): void
+    {
+        $store = $this->storeWithCredential([
+            'admin_api_access_token' => 'expired_access_token',
+            'refresh_token' => 'expired_refresh_token',
+            'expires_at' => now()->subMinute(),
+            'refresh_token_expires_at' => now()->subMinute(),
+        ]);
+        Http::preventStrayRequests();
+
+        $log = app(ShopifySyncService::class)->syncStore($store->fresh('credential'));
+
+        $this->assertSame('reconnect_required', $store->fresh()->status);
+        $this->assertSame('failed', $log->status);
+        $this->assertStringContainsString('Reconnect this store', $log->error_message);
+        $this->assertStringNotContainsString('expired_access_token', $log->error_message);
+        $this->assertStringNotContainsString('expired_refresh_token', $log->error_message);
+        Http::assertNothingSent();
+    }
+
+    public function test_legacy_non_expiring_token_rejection_becomes_reconnectable_without_leaking_token(): void
+    {
+        $store = $this->storeWithCredential([
+            'admin_api_access_token' => 'legacy_secret_token',
+        ]);
+
+        Http::fake([
+            'https://acme.myshopify.com/admin/api/2026-04/graphql.json' => Http::response([
+                'errors' => [[
+                    'message' => '[API] Non-expiring access tokens are no longer accepted for the Admin API.',
+                ]],
+            ]),
+        ]);
+
+        $log = app(ShopifySyncService::class)->syncStore($store->fresh('credential'));
+
+        $this->assertSame('reconnect_required', $store->fresh()->status);
+        $this->assertSame('failed', $log->status);
+        $this->assertSame(
+            'Shopify authorization expired. Reconnect this store from Shopify admin.',
+            $log->error_message,
+        );
+        $this->assertStringNotContainsString('legacy_secret_token', $log->error_message);
+    }
+
+    public function test_transient_shopify_failure_does_not_disconnect_the_store(): void
+    {
+        $store = $this->storeWithCredential([
+            'admin_api_access_token' => 'temporary_token',
+        ]);
+
+        Http::fake([
+            'https://acme.myshopify.com/admin/api/2026-04/graphql.json' => Http::response([], 503),
+        ]);
+
+        $log = app(ShopifySyncService::class)->syncStore($store->fresh('credential'));
+
+        $this->assertSame('connected', $store->fresh()->status);
+        $this->assertSame('failed', $log->status);
+        $this->assertSame('Shopify Admin API request failed with status 503.', $log->error_message);
+        $this->assertStringNotContainsString('temporary_token', $log->error_message);
     }
 
     public function test_article_publishing_uses_admin_graphql(): void

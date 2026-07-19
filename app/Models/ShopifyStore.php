@@ -47,7 +47,22 @@ class ShopifyStore extends Model
 
     public function latestSyncLog(): HasOne
     {
-        return $this->hasOne(ShopifySyncLog::class)->latestOfMany();
+        return $this->hasOne(ShopifySyncLog::class)
+            ->select([
+                'shopify_sync_logs.id',
+                'shopify_sync_logs.account_id',
+                'shopify_sync_logs.shopify_store_id',
+                'shopify_sync_logs.sync_type',
+                'shopify_sync_logs.status',
+                'shopify_sync_logs.counts',
+                'shopify_sync_logs.metadata',
+                'shopify_sync_logs.started_at',
+                'shopify_sync_logs.completed_at',
+                'shopify_sync_logs.error_message',
+                'shopify_sync_logs.created_at',
+                'shopify_sync_logs.updated_at',
+            ])
+            ->latestOfMany();
     }
 
     public function collections(): HasMany

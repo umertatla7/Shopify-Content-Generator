@@ -147,6 +147,28 @@ class ShopifyInstallControllerTest extends TestCase
         $response->assertRedirect('/onboarding?shop=umerjewelry.myshopify.com');
     }
 
+    public function test_reconnect_required_store_restarts_oauth_instead_of_using_old_credentials(): void
+    {
+        config()->set('services.shopify.public_app_api_key', 'shopify_key');
+        config()->set('services.shopify.public_app_client_secret', 'shopify_secret');
+
+        $owner = $this->memberWithStorePermission();
+        $store = $this->connectedStore($owner, 'reconnect-store.myshopify.com', 'Reconnect Store');
+        $store->forceFill([
+            'status' => 'reconnect_required',
+            'validation_error' => 'Shopify authorization expired. Reconnect this store from Shopify admin.',
+        ])->save();
+
+        $response = $this->actingAs($owner)->get(
+            '/shopify/app?shop=reconnect-store.myshopify.com&host=test-host&embedded=1'
+        );
+
+        $response->assertRedirect(
+            '/shopify/install/start?shop=reconnect-store.myshopify.com&host=test-host&embedded=1'
+        );
+        $response->assertDontSee('token-'.$store->id, false);
+    }
+
     public function test_shopify_oauth_callback_provisions_user_account_and_connected_store_for_guest(): void
     {
         config()->set('services.shopify.public_app_api_key', 'shopify_key');
@@ -158,6 +180,9 @@ class ShopifyInstallControllerTest extends TestCase
             'https://acme.myshopify.com/admin/oauth/access_token' => Http::response([
                 'access_token' => 'shpat_oauth_token',
                 'scope' => 'read_products,write_products',
+                'expires_in' => 3600,
+                'refresh_token' => 'shprt_oauth_refresh',
+                'refresh_token_expires_in' => 7776000,
             ]),
             'https://acme.myshopify.com/admin/api/2026-04/graphql.json' => Http::response([
                 'data' => [
@@ -210,8 +235,15 @@ class ShopifyInstallControllerTest extends TestCase
         $this->assertSame('connected', $store->status);
         $this->assertSame('Acme Store', $store->name);
         $this->assertSame('shpat_oauth_token', $store->credential->admin_api_access_token);
+        $this->assertSame('shprt_oauth_refresh', $store->credential->refresh_token);
+        $this->assertTrue($store->credential->expires_at->isFuture());
+        $this->assertTrue($store->credential->refresh_token_expires_at->isFuture());
         $this->assertSame('shopify_key', $store->credential->api_key);
         $this->assertSame(['read_products', 'write_products'], $store->credential->scopes);
+
+        Http::assertSent(fn ($request): bool => $request->url() === 'https://acme.myshopify.com/admin/oauth/access_token'
+            && ($request->data()['expiring'] ?? null) === 1
+            && ($request->data()['code'] ?? null) === 'code123');
 
         $this->assertAuthenticatedAs($user);
 
@@ -236,6 +268,9 @@ class ShopifyInstallControllerTest extends TestCase
             'https://acme.myshopify.com/admin/oauth/access_token' => Http::response([
                 'access_token' => 'shpat_oauth_token',
                 'scope' => 'read_products,write_products',
+                'expires_in' => 3600,
+                'refresh_token' => 'shprt_oauth_refresh',
+                'refresh_token_expires_in' => 7776000,
             ]),
             'https://acme.myshopify.com/admin/api/2026-04/graphql.json' => Http::response([
                 'data' => [
@@ -309,6 +344,9 @@ class ShopifyInstallControllerTest extends TestCase
             'https://acme-two.myshopify.com/admin/oauth/access_token' => Http::response([
                 'access_token' => 'shpat_oauth_token',
                 'scope' => 'read_products,write_products',
+                'expires_in' => 3600,
+                'refresh_token' => 'shprt_oauth_refresh',
+                'refresh_token_expires_in' => 7776000,
             ]),
             'https://acme-two.myshopify.com/admin/api/2026-04/graphql.json' => Http::response([
                 'data' => [
@@ -376,6 +414,9 @@ class ShopifyInstallControllerTest extends TestCase
             'https://acme.myshopify.com/admin/oauth/access_token' => Http::response([
                 'access_token' => 'shpat_oauth_token',
                 'scope' => 'read_products,write_products',
+                'expires_in' => 3600,
+                'refresh_token' => 'shprt_oauth_refresh',
+                'refresh_token_expires_in' => 7776000,
             ]),
             'https://acme.myshopify.com/admin/api/2026-04/graphql.json' => Http::response([
                 'data' => [
@@ -450,6 +491,9 @@ class ShopifyInstallControllerTest extends TestCase
             'https://acme.myshopify.com/admin/oauth/access_token' => Http::response([
                 'access_token' => 'replacement-token',
                 'scope' => 'read_products,write_products',
+                'expires_in' => 3600,
+                'refresh_token' => 'replacement-refresh-token',
+                'refresh_token_expires_in' => 7776000,
             ]),
             'https://acme.myshopify.com/admin/api/2026-04/graphql.json' => Http::response([
                 'data' => [
@@ -492,6 +536,7 @@ class ShopifyInstallControllerTest extends TestCase
         $this->assertSame(1, User::query()->count());
         $this->assertSame(1, ShopifyStore::query()->count());
         $this->assertSame('replacement-token', $store->fresh()->credential->admin_api_access_token);
+        $this->assertSame('replacement-refresh-token', $store->fresh()->credential->refresh_token);
     }
 
     public function test_shopify_session_token_creates_embedded_session_for_existing_store(): void

@@ -9,6 +9,7 @@ use App\Models\ShopifyCredential;
 use App\Models\ShopifyStore;
 use Illuminate\Http\Client\PendingRequest;
 use Illuminate\Support\Arr;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Str;
 use RuntimeException;
@@ -99,6 +100,7 @@ class ShopifyService
                 'client_id' => $this->publicAppApiKey(),
                 'client_secret' => $this->publicAppClientSecret(),
                 'code' => $code,
+                'expiring' => 1,
             ]);
 
         if ($response->failed()) {
@@ -109,6 +111,10 @@ class ShopifyService
 
         if (! ($payload['access_token'] ?? null)) {
             throw new RuntimeException('Shopify did not return an access token after OAuth.');
+        }
+
+        if (! ($payload['refresh_token'] ?? null) || (int) ($payload['expires_in'] ?? 0) <= 0) {
+            throw new RuntimeException('Shopify did not return a refreshable offline access token. Restart the app installation.');
         }
 
         return $payload;
@@ -176,8 +182,12 @@ GRAPHQL);
             'variables' => $variables ?: (object) [],
         ]);
 
+        if ($this->isAuthenticationFailure($response->status(), $response->json('errors.0.message'))) {
+            throw new ShopifyReconnectRequiredException('Shopify authorization expired. Reconnect this store from Shopify admin.');
+        }
+
         if ($response->failed() || $response->json('errors')) {
-            throw new RuntimeException($response->json('errors.0.message') ?? $response->body());
+            throw new RuntimeException($response->json('errors.0.message') ?? "Shopify Admin API request failed with status {$response->status()}.");
         }
 
         return $response->json('data', []);
@@ -428,53 +438,76 @@ GRAPHQL, [
 
     public function ensureAccessToken(ShopifyStore $store): string
     {
-        $credential = $this->credential($store);
+        return DB::transaction(function () use ($store): string {
+            $credential = ShopifyCredential::query()
+                ->where('shopify_store_id', $store->id)
+                ->lockForUpdate()
+                ->first();
 
-        if (
-            $credential->admin_api_access_token
-            && (
-                ! $credential->expires_at
-                || $credential->expires_at->gt(now()->addMinutes(10))
-            )
-        ) {
-            return $credential->admin_api_access_token;
-        }
+            if (! $credential) {
+                throw new ShopifyReconnectRequiredException('Shopify credentials are missing. Reconnect this store from Shopify admin.');
+            }
 
-        if (! $credential->api_key || ! $credential->client_secret) {
-            throw new RuntimeException('Shopify token is expired or missing. Add the store Client ID and Client Secret so the portal can refresh it.');
-        }
+            if (
+                $credential->admin_api_access_token
+                && (
+                    ! $credential->expires_at
+                    || $credential->expires_at->gt(now()->addMinutes(10))
+                )
+            ) {
+                return $credential->admin_api_access_token;
+            }
 
-        $response = Http::asForm()
-            ->acceptJson()
-            ->timeout((int) config('services.shopify.timeout', 30))
-            ->post("https://{$store->shop_domain}/admin/oauth/access_token", [
-                'grant_type' => 'client_credentials',
-                'client_id' => $credential->api_key,
-                'client_secret' => $credential->client_secret,
-            ]);
+            if (
+                ! $credential->refresh_token
+                || ($credential->refresh_token_expires_at && $credential->refresh_token_expires_at->isPast())
+            ) {
+                throw new ShopifyReconnectRequiredException('Shopify authorization expired. Reconnect this store from Shopify admin.');
+            }
 
-        if ($response->failed()) {
-            throw new RuntimeException($response->json('error_description') ?? $response->json('error') ?? 'Shopify rejected the Client ID and Client Secret.');
-        }
+            $response = Http::asForm()
+                ->acceptJson()
+                ->timeout((int) config('services.shopify.timeout', 30))
+                ->post("https://{$store->shop_domain}/admin/oauth/access_token", [
+                    'grant_type' => 'refresh_token',
+                    'client_id' => $this->publicAppApiKey(),
+                    'client_secret' => $this->publicAppClientSecret(),
+                    'refresh_token' => $credential->refresh_token,
+                ]);
 
-        $token = $response->json('access_token');
+            if ($response->status() === 401) {
+                throw new ShopifyReconnectRequiredException('Shopify authorization expired. Reconnect this store from Shopify admin.');
+            }
 
-        if (! $token) {
-            throw new RuntimeException('Shopify did not return an access token.');
-        }
+            if ($response->failed()) {
+                throw new RuntimeException('Shopify token refresh is temporarily unavailable. Try again shortly.');
+            }
 
-        $scopes = array_values(array_filter(array_map('trim', explode(',', (string) $response->json('scope', '')))));
-        $expiresIn = (int) $response->json('expires_in', 0);
+            $token = (string) $response->json('access_token', '');
+            $refreshToken = (string) $response->json('refresh_token', '');
+            $expiresIn = (int) $response->json('expires_in', 0);
+            $refreshExpiresIn = (int) $response->json('refresh_token_expires_in', 0);
 
-        $credential->forceFill([
-            'admin_api_access_token' => $token,
-            'scopes' => $scopes ?: null,
-            'expires_at' => $expiresIn > 0 ? now()->addSeconds($expiresIn) : null,
-        ])->save();
+            if ($token === '' || $refreshToken === '' || $expiresIn <= 0) {
+                throw new RuntimeException('Shopify returned an incomplete token refresh response. Try reconnecting the store if this continues.');
+            }
 
-        $store->setRelation('credential', $credential);
+            $scopes = array_values(array_filter(array_map('trim', explode(',', (string) $response->json('scope', '')))));
 
-        return $token;
+            $credential->forceFill([
+                'admin_api_access_token' => $token,
+                'refresh_token' => $refreshToken,
+                'scopes' => $scopes ?: $credential->scopes,
+                'expires_at' => now()->addSeconds($expiresIn),
+                'refresh_token_expires_at' => $refreshExpiresIn > 0
+                    ? now()->addSeconds($refreshExpiresIn)
+                    : $credential->refresh_token_expires_at,
+            ])->save();
+
+            $store->setRelation('credential', $credential);
+
+            return $token;
+        }, 3);
     }
 
     private function client(ShopifyStore $store): PendingRequest
@@ -487,22 +520,26 @@ GRAPHQL, [
         ])->timeout((int) config('services.shopify.timeout', 30));
     }
 
-    private function credential(ShopifyStore $store): ShopifyCredential
-    {
-        $credential = $store->relationLoaded('credential') ? $store->credential : $store->credential()->first();
-
-        if (! $credential) {
-            throw new RuntimeException('Shopify credentials are missing for this store.');
-        }
-
-        return $credential;
-    }
-
     private function baseUrl(ShopifyStore $store): string
     {
         $version = config('services.shopify.api_version', '2026-04');
 
         return "https://{$store->shop_domain}/admin/api/{$version}";
+    }
+
+    private function isAuthenticationFailure(int $status, mixed $message): bool
+    {
+        if ($status === 401) {
+            return true;
+        }
+
+        $message = is_string($message) ? Str::lower($message) : '';
+
+        return Str::contains($message, [
+            'non-expiring access tokens are no longer accepted',
+            'invalid access token',
+            'access token is invalid',
+        ]);
     }
 
     private function resolveBlogId(ShopifyStore $store, ?string $blogId): ?string

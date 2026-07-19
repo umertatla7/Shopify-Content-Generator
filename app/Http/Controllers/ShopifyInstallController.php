@@ -63,6 +63,10 @@ class ShopifyInstallController extends Controller
             $store = ShopifyStore::query()->where('shop_domain', $shop)->first();
         }
 
+        if ($store?->status === 'reconnect_required') {
+            return redirect()->to($shopifyContext->decorate(route('shopify.install.start', ['shop' => $shop]), $request));
+        }
+
         if ($this->isEmbeddedRequest($request) && $store?->credential?->admin_api_access_token) {
             return response()->view('shopify-session', [
                 'apiKey' => $shopify->publicAppApiKey(),
@@ -370,10 +374,14 @@ class ShopifyInstallController extends Controller
             [
                 'account_id' => $store->account_id,
                 'admin_api_access_token' => $tokenPayload['access_token'],
+                'refresh_token' => $tokenPayload['refresh_token'],
                 'api_key' => config('services.shopify.public_app_api_key'),
                 'client_secret' => config('services.shopify.public_app_client_secret'),
                 'scopes' => $scopes ?: null,
-                'expires_at' => null,
+                'expires_at' => now()->addSeconds((int) $tokenPayload['expires_in']),
+                'refresh_token_expires_at' => isset($tokenPayload['refresh_token_expires_in'])
+                    ? now()->addSeconds((int) $tokenPayload['refresh_token_expires_in'])
+                    : null,
             ]
         );
 

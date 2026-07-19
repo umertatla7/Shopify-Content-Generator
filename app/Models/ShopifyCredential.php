@@ -14,6 +14,7 @@ class ShopifyCredential extends Model
 
     protected $hidden = [
         'admin_api_access_token',
+        'refresh_token',
         'api_key',
         'client_secret',
     ];
@@ -22,10 +23,12 @@ class ShopifyCredential extends Model
     {
         return [
             'admin_api_access_token' => 'encrypted',
+            'refresh_token' => 'encrypted',
             'api_key' => 'encrypted',
             'client_secret' => 'encrypted',
             'scopes' => 'array',
             'expires_at' => 'datetime',
+            'refresh_token_expires_at' => 'datetime',
         ];
     }
 
